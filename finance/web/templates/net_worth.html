@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Net Worth History — Finance{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Net Worth History</h1>
+
+<div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+  <canvas id="netWorthChart" height="120"></canvas>
+</div>
+
+<script>
+(function () {
+  const raw = {{ chart_data_json | safe }};
+  if (!raw.labels.length) {
+    document.getElementById('netWorthChart').parentElement.innerHTML =
+      '<p class="text-gray-500 text-sm py-4">No balance history data yet. Run a sync to get started.</p>';
+    return;
+  }
+  new Chart(document.getElementById('netWorthChart'), {
+    type: 'line',
+    data: {
+      labels: raw.labels,
+      datasets: [{
+        label: 'Net Worth ($)',
+        data: raw.values,
+        borderColor: 'rgb(99, 102, 241)',
+        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+        fill: true,
+        tension: 0.2,
+        pointRadius: raw.labels.length > 60 ? 0 : 3,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => '$' + ctx.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2 })
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            maxTicksLimit: 12,
+            font: { size: 11 }
+          }
+        },
+        y: {
+          ticks: {
+            callback: v => '$' + v.toLocaleString('en-US', { notation: 'compact' }),
+            font: { size: 11 }
+          }
+        }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

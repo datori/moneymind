@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Transactions — Finance{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Transactions</h1>
+
+<!-- Filter form -->
+<form method="get" action="/transactions" class="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-6 flex flex-wrap gap-4 items-end">
+  <div>
+    <label class="block text-xs text-gray-500 mb-1" for="start">Start date</label>
+    <input id="start" name="start" type="date" value="{{ start }}"
+      class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+  </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1" for="end">End date</label>
+    <input id="end" name="end" type="date" value="{{ end }}"
+      class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+  </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1" for="limit">Limit</label>
+    <input id="limit" name="limit" type="number" min="1" max="1000" value="{{ limit }}"
+      class="border border-gray-300 rounded px-3 py-1.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+  </div>
+  <button type="submit"
+    class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors">
+    Filter
+  </button>
+</form>
+
+{% if transactions %}
+<div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+      <tr>
+        <th class="px-4 py-3 text-left">Date</th>
+        <th class="px-4 py-3 text-left">Description</th>
+        <th class="px-4 py-3 text-left">Merchant</th>
+        <th class="px-4 py-3 text-left">Category</th>
+        <th class="px-4 py-3 text-left">Account</th>
+        <th class="px-4 py-3 text-right">Amount</th>
+        <th class="px-4 py-3 text-center">Pending</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for txn in transactions %}
+      <tr class="border-t border-gray-100 hover:bg-gray-50">
+        <td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ txn.date }}</td>
+        <td class="px-4 py-2 max-w-xs truncate" title="{{ txn.description or '' }}">{{ txn.description or '—' }}</td>
+        <td class="px-4 py-2 text-gray-600">{{ txn.merchant_name or '—' }}</td>
+        <td class="px-4 py-2 text-gray-600">{{ txn.category or '—' }}</td>
+        <td class="px-4 py-2 text-gray-600">{{ txn.account_name or '—' }}</td>
+        <td class="px-4 py-2 text-right font-medium {% if txn.amount < 0 %}text-red-600{% else %}text-green-600{% endif %}">
+          {% if txn.amount < 0 %}-{% endif %}${{ "%.2f"|format(txn.amount | abs) }}
+        </td>
+        <td class="px-4 py-2 text-center">
+          {% if txn.pending %}<span class="text-yellow-500 text-xs font-medium">Pending</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-xs text-gray-400 mt-2">Showing {{ transactions | length }} transaction(s).</p>
+{% else %}
+<p class="text-gray-500 text-sm">No transactions found for the selected range.</p>
+{% endif %}
+{% endblock %}

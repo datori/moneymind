@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Spending — Finance{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Spending Breakdown</h1>
+
+<!-- Filter form -->
+<form method="get" action="/spending" class="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-6 flex flex-wrap gap-4 items-end">
+  <div>
+    <label class="block text-xs text-gray-500 mb-1" for="start">Start date</label>
+    <input id="start" name="start" type="date" value="{{ start }}"
+      class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+  </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1" for="end">End date</label>
+    <input id="end" name="end" type="date" value="{{ end }}"
+      class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+  </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1" for="group_by">Group by</label>
+    <select id="group_by" name="group_by"
+      class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+      <option value="category" {% if group_by == 'category' %}selected{% endif %}>Category</option>
+      <option value="merchant" {% if group_by == 'merchant' %}selected{% endif %}>Merchant</option>
+      <option value="account" {% if group_by == 'account' %}selected{% endif %}>Account</option>
+    </select>
+  </div>
+  <button type="submit"
+    class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors">
+    Apply
+  </button>
+</form>
+
+{% if spending %}
+<div class="flex gap-6 flex-wrap">
+  <!-- Bar Chart -->
+  <div class="flex-1 min-w-80 bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+    <canvas id="spendingChart" height="300"></canvas>
+  </div>
+  <!-- Table -->
+  <div class="flex-1 min-w-64 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden self-start">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+        <tr>
+          <th class="px-4 py-3 text-left">{{ group_by | capitalize }}</th>
+          <th class="px-4 py-3 text-right">Amount</th>
+          <th class="px-4 py-3 text-right">Transactions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in spending %}
+        <tr class="border-t border-gray-100">
+          <td class="px-4 py-2">{{ row.label }}</td>
+          <td class="px-4 py-2 text-right font-medium">${{ "%.2f"|format(row.total) }}</td>
+          <td class="px-4 py-2 text-right text-gray-500">{{ row.count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  const raw = {{ chart_data_json | safe }};
+  const colors = raw.labels.map((_, i) => `hsl(${(i * 47) % 360}, 65%, 55%)`);
+  new Chart(document.getElementById('spendingChart'), {
+    type: 'bar',
+    data: {
+      labels: raw.labels,
+      datasets: [{
+        label: 'Spending ($)',
+        data: raw.values,
+        backgroundColor: colors,
+        borderWidth: 1,
+        borderColor: colors.map(c => c.replace('55%', '40%')),
+      }]
+    },
+    options: {
+      responsive: true,
+      indexAxis: raw.labels.length > 8 ? 'y' : 'x',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => '$' + ctx.parsed[raw.labels.length > 8 ? 'x' : 'y'].toLocaleString('en-US', { minimumFractionDigits: 2 })
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { font: { size: 11 } } },
+        y: { ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+})();
+</script>
+{% else %}
+<p class="text-gray-500 text-sm">No spending data found for the selected period.</p>
+{% endif %}
+{% endblock %}

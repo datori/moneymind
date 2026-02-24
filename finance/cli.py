@@ -64,6 +64,9 @@ def sync(ctx: click.Context) -> None:
 
 def _sync_run() -> None:
     """Core sync logic (shared by `finance sync` and `finance sync run`)."""
+    import logging
+    import os
+
     from finance.ingestion.sync import sync_all
 
     conn = _open_db()
@@ -81,6 +84,16 @@ def _sync_run() -> None:
         f"{result['new_transactions']} new transaction(s), "
         f"at {result['synced_at']}"
     )
+
+    # Pass 2: enrich transactions (non-fatal)
+    if os.getenv("ANTHROPIC_API_KEY"):
+        from finance.ai.enrich import enrich_transactions
+
+        try:
+            enriched = enrich_transactions(conn)
+            click.echo(f"Enrichment complete — {enriched} transaction(s) enriched.")
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger(__name__).warning("Enrichment failed (non-fatal): %s", exc)
 
 
 @sync.command("run")
@@ -121,13 +134,10 @@ def sync_setup(setup_token_url: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-@main.command("accounts")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
-def accounts(as_json: bool) -> None:
-    """List all active accounts with their current balance."""
+def _accounts_list(conn, as_json: bool) -> None:
+    """Print the accounts table (shared by `accounts` default and `accounts list`)."""
     from finance.analysis.accounts import get_accounts
 
-    conn = _open_db()
     data = get_accounts(conn)
 
     if as_json:
@@ -151,6 +161,92 @@ def accounts(as_json: bool) -> None:
         for a in data
     ]
     _print_table(headers, rows)
+
+
+@main.group("accounts", invoke_without_command=True)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+@click.pass_context
+def accounts(ctx: click.Context, as_json: bool) -> None:
+    """Manage accounts: list (default) or delete."""
+    if ctx.invoked_subcommand is None:
+        conn = _open_db()
+        _accounts_list(conn, as_json)
+
+
+@accounts.command("list")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+def accounts_list(as_json: bool) -> None:
+    """List all active accounts with their current balance."""
+    conn = _open_db()
+    _accounts_list(conn, as_json)
+
+
+@accounts.command("delete")
+@click.argument("account_id")
+@click.option("--confirm", "confirmed", is_flag=True, help="Skip confirmation prompt.")
+def accounts_delete(account_id: str, confirmed: bool) -> None:
+    """Delete an account and all associated data.
+
+    \b
+    ACCOUNT_ID  The account ID to delete (use `finance accounts` to find it).
+
+    Deletes the account and all dependent rows from: transactions, balances,
+    sync_state, and credit_limits.  Use --confirm to skip the interactive prompt.
+    """
+    conn = _open_db()
+
+    # Check account exists
+    row = conn.execute(
+        "SELECT id, name FROM accounts WHERE id = ?", (account_id,)
+    ).fetchone()
+    if row is None:
+        click.echo(f"Error: account '{account_id}' not found.", err=True)
+        sys.exit(1)
+
+    account_name = row["name"]
+
+    # Confirmation guard
+    if not confirmed:
+        answer = click.prompt(
+            f"Delete account '{account_name}' and all associated data? [y/N]",
+            default="N",
+            show_default=False,
+        )
+        if answer.strip().lower() not in ("y", "yes"):
+            click.echo("Aborted.")
+            return
+
+    # Cascade delete inside a single transaction
+    conn.execute("BEGIN")
+    try:
+        cl_count = conn.execute(
+            "DELETE FROM credit_limits WHERE account_id = ?", (account_id,)
+        ).rowcount
+        ss_count = conn.execute(
+            "DELETE FROM sync_state WHERE account_id = ?", (account_id,)
+        ).rowcount
+        tx_count = conn.execute(
+            "DELETE FROM transactions WHERE account_id = ?", (account_id,)
+        ).rowcount
+        bal_count = conn.execute(
+            "DELETE FROM balances WHERE account_id = ?", (account_id,)
+        ).rowcount
+        conn.execute(
+            "DELETE FROM accounts WHERE id = ?", (account_id,)
+        )
+        conn.execute("COMMIT")
+    except Exception as exc:
+        conn.execute("ROLLBACK")
+        click.echo(f"Error during deletion: {exc}", err=True)
+        sys.exit(1)
+
+    click.echo(
+        f"Deleted account '{account_name}' ({account_id}).\n"
+        f"  transactions:  {tx_count} row(s)\n"
+        f"  balances:      {bal_count} row(s)\n"
+        f"  sync_state:    {ss_count} row(s)\n"
+        f"  credit_limits: {cl_count} row(s)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +511,8 @@ def categorize(recategorize_all: bool) -> None:
         )
         sys.exit(1)
 
+    import logging
+
     from finance.ai.categorize import categorize_all, categorize_uncategorized
 
     conn = _open_db()
@@ -424,6 +522,16 @@ def categorize(recategorize_all: bool) -> None:
         count = categorize_uncategorized(conn)
 
     click.echo(f"Categorized {count} transaction(s).")
+
+    # Pass 2: enrich transactions (non-fatal)
+    if os.getenv("ANTHROPIC_API_KEY"):
+        from finance.ai.enrich import enrich_transactions
+
+        try:
+            enriched = enrich_transactions(conn)
+            click.echo(f"Enrichment complete — {enriched} transaction(s) enriched.")
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger(__name__).warning("Enrichment failed (non-fatal): %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -495,6 +603,69 @@ def institutions() -> None:
 
 
 # ---------------------------------------------------------------------------
+# finance data
+# ---------------------------------------------------------------------------
+
+
+@main.command("data")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+def data_overview(as_json: bool) -> None:
+    """Show data coverage summary: transaction counts, date ranges, and last sync per account."""
+    from finance.analysis.overview import get_data_overview
+
+    conn = _open_db()
+    result = get_data_overview(conn)
+
+    if as_json:
+        click.echo(json.dumps(result, indent=2))
+        return
+
+    per_account = result["per_account"]
+    if not per_account:
+        click.echo("No accounts found.")
+        return
+
+    g = result["global"]
+    # Compute months covered from date range
+    earliest = g["earliest_transaction"]
+    latest = g["latest_transaction"]
+    if earliest and latest:
+        e_year, e_month = int(earliest[:4]), int(earliest[5:7])
+        l_year, l_month = int(latest[:4]), int(latest[5:7])
+        months = (l_year - e_year) * 12 + (l_month - e_month) + 1
+        months_str = f", covering {months} month{'s' if months != 1 else ''}"
+    else:
+        months_str = ""
+
+    click.echo(
+        f"{g['total_transactions']} transaction{'s' if g['total_transactions'] != 1 else ''} "
+        f"across {g['total_accounts']} account{'s' if g['total_accounts'] != 1 else ''}"
+        f"{months_str}"
+    )
+    click.echo("")
+
+    import datetime as _dt
+
+    headers = ["Account", "Institution", "Transactions", "Earliest", "Latest", "Last Synced"]
+    rows = []
+    for a in per_account:
+        if a["last_synced_at"] is not None:
+            ts_s = a["last_synced_at"] / 1000
+            last_synced = _dt.datetime.fromtimestamp(ts_s).strftime("%Y-%m-%d %H:%M")
+        else:
+            last_synced = "Never"
+        rows.append([
+            a["name"],
+            a["institution"] or "",
+            str(a["txn_count"]),
+            a["earliest_txn"] or "—",
+            a["latest_txn"] or "—",
+            last_synced,
+        ])
+    _print_table(headers, rows)
+
+
+# ---------------------------------------------------------------------------
 # finance limits
 # ---------------------------------------------------------------------------
 
@@ -529,3 +700,139 @@ def limits(as_json: bool) -> None:
         for r in data
     ]
     _print_table(headers, table_rows)
+
+
+# ---------------------------------------------------------------------------
+# finance review
+# ---------------------------------------------------------------------------
+
+
+@main.command("review")
+@click.option("--list", "list_only", is_flag=True, help="Print table of flagged transactions without interactive triage.")
+def review(list_only: bool) -> None:
+    """Triage transactions flagged for review.
+
+    Without --list, launches an interactive session to accept, reclassify, or
+    skip each flagged transaction one at a time.
+
+    Use --list to print a read-only summary table instead.
+    """
+    from finance.analysis.review import get_review_queue
+    from finance.ai.categories import CATEGORIES
+
+    conn = _open_db()
+    queue = get_review_queue(conn)
+
+    if not queue:
+        click.echo("No transactions flagged for review.")
+        return
+
+    if list_only:
+        # --list mode: print table
+        headers = ["Date", "Amount", "Merchant", "Category", "Reason"]
+        rows = [
+            [
+                t["date"],
+                f"{t['amount']:>10.2f}" if t["amount"] is not None else "",
+                (t["merchant_normalized"] or t["merchant_name"] or t["description"] or "")[:30],
+                t["category"] or "",
+                (t["review_reason"] or "")[:50],
+            ]
+            for t in queue
+        ]
+        _print_table(headers, rows)
+        return
+
+    # Interactive triage mode
+    accepted = 0
+    reclassified = 0
+    skipped = 0
+    total = len(queue)
+
+    for idx, txn in enumerate(queue, start=1):
+        click.echo("")
+        click.echo(f"--- Transaction {idx}/{total} ---")
+        click.echo(f"  ID         : {txn['id']}")
+        click.echo(f"  Date       : {txn['date']}")
+        click.echo(f"  Amount     : {txn['amount']}")
+        click.echo(f"  Description: {txn['description'] or ''}")
+        click.echo(f"  Merchant   : {txn['merchant_normalized'] or txn['merchant_name'] or ''}")
+        click.echo(f"  Category   : {txn['category'] or ''}")
+        click.echo(f"  Reason     : {txn['review_reason'] or ''}")
+
+        while True:
+            choice = click.prompt("[a]ccept / [r]eclassify / [s]kip", default="s").strip().lower()
+            if choice in ("a", "accept"):
+                conn.execute(
+                    "UPDATE transactions SET needs_review = 0 WHERE id = ?",
+                    (txn["id"],),
+                )
+                conn.commit()
+                accepted += 1
+                click.echo("  Accepted.")
+                break
+            elif choice in ("r", "reclassify"):
+                while True:
+                    new_cat = click.prompt("Enter new category").strip()
+                    if new_cat in CATEGORIES:
+                        conn.execute(
+                            "UPDATE transactions SET needs_review = 0, category = ? WHERE id = ?",
+                            (new_cat, txn["id"]),
+                        )
+                        conn.commit()
+                        reclassified += 1
+                        click.echo(f"  Reclassified to '{new_cat}'.")
+                        break
+                    else:
+                        valid = ", ".join(CATEGORIES)
+                        click.echo(f"  Invalid category. Valid options: {valid}")
+                break
+            elif choice in ("s", "skip"):
+                skipped += 1
+                click.echo("  Skipped.")
+                break
+            else:
+                click.echo("  Please enter 'a', 'r', or 's'.")
+
+    click.echo("")
+    click.echo(
+        f"Reviewed {total} transaction(s). "
+        f"Accepted: {accepted}. "
+        f"Reclassified: {reclassified}. "
+        f"Skipped: {skipped}."
+    )
+
+
+# ---------------------------------------------------------------------------
+# finance recurring
+# ---------------------------------------------------------------------------
+
+
+@main.command("recurring")
+def recurring() -> None:
+    """Show detected recurring charges grouped by merchant.
+
+    Run `finance sync` or `finance categorize` to populate enrichment data.
+    """
+    from finance.analysis.review import get_recurring
+
+    conn = _open_db()
+    data = get_recurring(conn)
+
+    if not data:
+        click.echo(
+            "No recurring charges detected. "
+            "Run `finance sync` to enrich transactions."
+        )
+        return
+
+    headers = ["Merchant", "Count", "Typical Amount"]
+    rows = [
+        [
+            d["merchant_normalized"],
+            str(d["count"]),
+            f"${d['typical_amount']:,.2f}",
+        ]
+        for d in data
+    ]
+    _print_table(headers, rows)

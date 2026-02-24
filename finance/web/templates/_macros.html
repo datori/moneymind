@@ -1,0 +1,37 @@
+{% macro category_badge(cat) %}
+{% if cat == "Food & Dining" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">Food &amp; Dining</span>
+{% elif cat == "Groceries" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Groceries</span>
+{% elif cat == "Transportation" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Transportation</span>
+{% elif cat == "Shopping" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">Shopping</span>
+{% elif cat == "Entertainment" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-700">Entertainment</span>
+{% elif cat == "Travel" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-700">Travel</span>
+{% elif cat == "Health & Fitness" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Health &amp; Fitness</span>
+{% elif cat == "Home & Utilities" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">Home &amp; Utilities</span>
+{% elif cat == "Subscriptions & Software" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">Subscriptions &amp; Software</span>
+{% elif cat == "Personal Care" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-700">Personal Care</span>
+{% elif cat == "Education" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-700">Education</span>
+{% elif cat == "Financial" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">Financial</span>
+{% elif cat == "Income" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Income</span>
+{% elif cat == "Investment" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-lime-100 text-lime-700">Investment</span>
+{% elif cat == "Other" %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Other</span>
+{% elif cat %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{{ cat }}</span>
+{% else %}
+<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">—</span>
+{% endif %}
+{% endmacro %}

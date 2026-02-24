@@ -75,3 +75,19 @@ def init_db(conn: sqlite3.Connection) -> None:
     """Create all tables if they do not already exist."""
     conn.executescript(_SCHEMA)
     conn.commit()
+
+    # Schema migrations: add new columns to transactions.
+    # Each ALTER TABLE is idempotent — OperationalError is suppressed when the
+    # column already exists (SQLite does not support IF NOT EXISTS for columns).
+    _migrations = [
+        "ALTER TABLE transactions ADD COLUMN needs_review INTEGER DEFAULT 0",
+        "ALTER TABLE transactions ADD COLUMN review_reason TEXT",
+        "ALTER TABLE transactions ADD COLUMN is_recurring INTEGER DEFAULT 0",
+        "ALTER TABLE transactions ADD COLUMN merchant_normalized TEXT",
+    ]
+    for stmt in _migrations:
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError:
+            pass  # column already exists
+    conn.commit()

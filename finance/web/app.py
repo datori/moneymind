@@ -11,12 +11,14 @@ from pathlib import Path
 from typing import Generator
 
 import uvicorn
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from finance.analysis.accounts import get_accounts, get_credit_utilization
+from finance.analysis.overview import get_data_overview
 from finance.analysis.net_worth import get_balance_history, get_net_worth
+from finance.analysis.review import get_recurring, get_review_queue
 from finance.analysis.spending import get_spending_summary, get_transactions
 from finance.ingestion.sync import sync_all
 
@@ -106,11 +108,25 @@ async def accounts_page(
     request: Request,
     conn: sqlite3.Connection = Depends(get_db),
 ):
-    """Account list with current balances."""
+    """Account list with current balances and data coverage."""
     accounts = get_accounts(conn)
+    overview = get_data_overview(conn)
     return templates.TemplateResponse(
         "accounts.html",
-        {"request": request, "accounts": accounts},
+        {"request": request, "accounts": accounts, "overview": overview},
+    )
+
+
+@app.get("/data", response_class=HTMLResponse)
+async def data_page(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Data coverage overview: transaction counts, date ranges, last sync per account."""
+    overview = get_data_overview(conn)
+    return templates.TemplateResponse(
+        "data.html",
+        {"request": request, "overview": overview},
     )
 
 
@@ -210,6 +226,59 @@ async def spending_page(
             "group_by": group_by,
             "chart_data_json": chart_data_json,
         },
+    )
+
+
+@app.get("/review", response_class=HTMLResponse)
+async def review_page(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Review queue: transactions flagged for human review."""
+    from finance.ai.categories import CATEGORIES
+
+    transactions = get_review_queue(conn)
+    return templates.TemplateResponse(
+        "review.html",
+        {
+            "request": request,
+            "transactions": transactions,
+            "categories": CATEGORIES,
+        },
+    )
+
+
+@app.post("/review/{transaction_id}/approve")
+async def review_approve(
+    transaction_id: str,
+    category: str = Form(None),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Approve a flagged transaction: clear needs_review, optionally update category."""
+    if category:
+        conn.execute(
+            "UPDATE transactions SET needs_review = 0, category = ? WHERE id = ?",
+            (category, transaction_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE transactions SET needs_review = 0 WHERE id = ?",
+            (transaction_id,),
+        )
+    conn.commit()
+    return RedirectResponse(url="/review", status_code=303)
+
+
+@app.get("/recurring", response_class=HTMLResponse)
+async def recurring_page(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Recurring charges summary."""
+    data = get_recurring(conn)
+    return templates.TemplateResponse(
+        "recurring.html",
+        {"request": request, "recurring": data},
     )
 
 

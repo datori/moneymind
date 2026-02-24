@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Recurring Charges — Finance{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Recurring Charges</h1>
+
+{% if recurring %}
+<p class="text-sm text-gray-500 mb-4">
+  {{ recurring | length }} recurring merchant(s) detected.
+</p>
+<div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+      <tr>
+        <th class="px-4 py-3 text-left">Merchant</th>
+        <th class="px-4 py-3 text-right">Occurrences</th>
+        <th class="px-4 py-3 text-right">Typical Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in recurring %}
+      <tr class="border-t border-gray-100 hover:bg-gray-50">
+        <td class="px-4 py-2 font-medium">{{ item.merchant_normalized }}</td>
+        <td class="px-4 py-2 text-right text-gray-600">{{ item.count }}</td>
+        <td class="px-4 py-2 text-right font-medium text-gray-800">
+          ${{ "%.2f"|format(item.typical_amount) }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-xs text-gray-400 mt-2">{{ recurring | length }} recurring merchant(s).</p>
+{% else %}
+<p class="text-gray-500 text-sm">No recurring charges detected.</p>
+{% endif %}
+{% endblock %}

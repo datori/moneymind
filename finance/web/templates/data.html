@@ -1,69 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Accounts — Finance{% endblock %}
+{% block title %}Data — Finance{% endblock %}
 
 {% block content %}
-<h1 class="text-2xl font-bold mb-6">Accounts</h1>
+<h1 class="text-2xl font-bold mb-6">Data Coverage</h1>
 
-{% if accounts %}
-<div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-  <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
-      <tr>
-        <th class="px-4 py-3 text-left">Name</th>
-        <th class="px-4 py-3 text-left">Type</th>
-        <th class="px-4 py-3 text-left">Institution</th>
-        <th class="px-4 py-3 text-right">Balance</th>
-        <th class="px-4 py-3 text-right">Available</th>
-        <th class="px-4 py-3 text-left">Last Updated</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for acct in accounts %}
-      <tr class="border-t border-gray-100 hover:bg-gray-50">
-        <td class="px-4 py-3 font-medium">
-          {{ acct.name }}
-          {% if acct.mask %}<span class="text-gray-400 font-normal text-xs ml-1">••{{ acct.mask }}</span>{% endif %}
-        </td>
-        <td class="px-4 py-3 capitalize text-gray-600">{{ acct.type or '—' }}</td>
-        <td class="px-4 py-3 text-gray-600">{{ acct.institution or '—' }}</td>
-        <td class="px-4 py-3 text-right {% if acct.balance is not none and acct.balance < 0 %}text-red-600{% endif %}">
-          {% if acct.balance is not none %}${{ "%.2f"|format(acct.balance) }}{% else %}<span class="text-gray-400">—</span>{% endif %}
-        </td>
-        <td class="px-4 py-3 text-right text-gray-600">
-          {% if acct.available is not none %}${{ "%.2f"|format(acct.available) }}{% else %}<span class="text-gray-400">—</span>{% endif %}
-        </td>
-        <td class="px-4 py-3 text-gray-500 text-xs js-unix-ms">
-          {% if acct.last_updated %}
-            {{ (acct.last_updated / 1000) | int | string }}
-          {% else %}—{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% else %}
-<p class="text-gray-500 text-sm">No accounts found. Run a sync to import your accounts.</p>
-{% endif %}
-
-<!-- Data Coverage Section -->
-{% if overview %}
 {% set g = overview.global %}
-<h2 class="text-xl font-semibold mt-10 mb-2">Data Coverage</h2>
 
 {# Compute global months covered #}
 {% if g.earliest_transaction and g.latest_transaction %}
   {% set e_year = g.earliest_transaction[:4] | int %}
   {% set e_month = g.earliest_transaction[5:7] | int %}
   {% set l_year = g.latest_transaction[:4] | int %}
-  {% set l_month = g.latest_transaction[7:7] | int %}
   {% set l_month = g.latest_transaction[5:7] | int %}
   {% set months_covered = (l_year - e_year) * 12 + (l_month - e_month) + 1 %}
 {% else %}
   {% set months_covered = 0 %}
 {% endif %}
 
-<p class="text-sm text-gray-600 mb-4">
+<p class="text-sm text-gray-600 mb-6">
   {{ g.total_transactions }} transaction{{ 's' if g.total_transactions != 1 else '' }}
   across {{ g.total_accounts }} account{{ 's' if g.total_accounts != 1 else '' }}
   {% if months_covered > 0 %}, covering {{ months_covered }} month{{ 's' if months_covered != 1 else '' }}{% endif %}
@@ -111,20 +65,10 @@
   </table>
 </div>
 {% else %}
-<p class="text-gray-500 text-sm">No account data available.</p>
-{% endif %}
+<p class="text-gray-500 text-sm">No accounts configured. Run a sync or import a CSV to get started.</p>
 {% endif %}
 
 <script>
-// Convert unix-ms timestamps to readable dates (balance table last-updated column)
-document.querySelectorAll('td.js-unix-ms').forEach(td => {
-  const raw = td.textContent.trim();
-  if (/^\d{9,}$/.test(raw)) {
-    const d = new Date(parseInt(raw) * 1000);
-    td.textContent = d.toLocaleString();
-  }
-});
-
 // Format date ranges as "Mon YY – Mon YY"
 document.querySelectorAll('.js-date-range').forEach(el => {
   const fmt = d => {

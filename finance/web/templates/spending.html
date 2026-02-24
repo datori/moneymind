@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import category_badge %}
 {% block title %}Spending — Finance{% endblock %}
 
 {% block content %}
@@ -50,7 +51,7 @@
       <tbody>
         {% for row in spending %}
         <tr class="border-t border-gray-100">
-          <td class="px-4 py-2">{{ row.label }}</td>
+          <td class="px-4 py-2">{% if group_by == 'category' %}{{ category_badge(row.label) }}{% else %}{{ row.label }}{% endif %}</td>
           <td class="px-4 py-2 text-right font-medium">${{ "%.2f"|format(row.total) }}</td>
           <td class="px-4 py-2 text-right text-gray-500">{{ row.count }}</td>
         </tr>

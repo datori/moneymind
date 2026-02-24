@@ -312,6 +312,55 @@ def normalize_robinhood(row: dict, account_id: str) -> Transaction | None:
     )
 
 
+def normalize_apple(row: dict, account_id: str) -> Transaction | None:
+    """Normalize an Apple Card CSV row.
+
+    Expected columns: ``Transaction Date``, ``Clearing Date``, ``Description``,
+    ``Merchant``, ``Category``, ``Type``, ``Amount (USD)``.
+
+    Amount sign convention: Apple exports positive = charge (debit). The
+    normalizer negates the amount to match the canonical convention
+    (negative = debit).
+
+    Rows where ``Type == "Payments"`` are skipped (card payoff rows).
+
+    Args:
+        row:        A single CSV row dict from ``csv.DictReader``.
+        account_id: Account primary key.
+
+    Returns:
+        A :class:`Transaction` or ``None`` to skip the row.
+    """
+    txn_type = (row.get("Type") or "").strip()
+    if txn_type == "Payments":
+        return None
+
+    date_raw = (row.get("Transaction Date") or "").strip()
+    amount_raw = (row.get("Amount (USD)") or "").strip()
+    merchant_name = (row.get("Merchant") or "").strip() or None
+    description = (row.get("Description") or "").strip() or None
+
+    if not date_raw or not amount_raw:
+        return None
+
+    date = _parse_date(date_raw)
+    try:
+        amount = -float(amount_raw.replace(",", ""))
+    except ValueError:
+        return None
+
+    txn_id = generate_csv_id(account_id, date_raw, amount_raw, description or "")
+    return Transaction(
+        id=txn_id,
+        account_id=account_id,
+        date=date,
+        amount=amount,
+        description=description,
+        merchant_name=merchant_name,
+        raw=json.dumps(dict(row)),
+    )
+
+
 def normalize_m1(row: dict, account_id: str) -> Transaction | None:
     """Normalize an M1 Finance CSV row (best-effort).
 
@@ -371,6 +420,7 @@ NORMALIZERS: dict[str, Callable[[dict, str], Transaction | None]] = {
     "amex": normalize_amex,
     "robinhood": normalize_robinhood,
     "m1": normalize_m1,
+    "apple": normalize_apple,
 }
 
 

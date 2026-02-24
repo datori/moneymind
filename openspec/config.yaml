@@ -1,0 +1,49 @@
+schema: spec-driven
+
+context: |
+  Project: Personal AI Finance Intelligence System
+  Owner: Single user (personal use only)
+
+  Tech stack:
+    - Python 3.12+ with uv (package manager)
+    - SQLite (local storage, single file)
+    - MCP Python SDK (anthropic/mcp) for Claude integration
+    - httpx for HTTP (SimpleFIN API)
+    - click for CLI
+    - python-dotenv for config
+
+  Architecture:
+    - finance/ Python package with submodules
+    - db.py: SQLite schema, connection, query helpers
+    - ingestion/: SimpleFIN client + CSV importers
+    - analysis/: Pure query functions (no AI, no network)
+    - ai/: LLM-based features (categorization)
+    - server.py: MCP server entry point (exposes tools to Claude)
+    - cli.py: Click CLI (calls analysis layer directly)
+
+  Data model (SQLite):
+    - institutions: connection metadata
+    - accounts: all financial accounts
+    - balances: append-only balance history snapshots
+    - transactions: deduplicated by id (SimpleFIN id or hash of CSV row)
+    - sync_state: last sync timestamp per account
+
+  MCP tools (public API):
+    - get_accounts()
+    - get_transactions(start_date, end_date, account_id?, category?, ...)
+    - get_net_worth(as_of_date?)
+    - get_spending_summary(start_date, end_date, group_by)
+    - get_credit_utilization()
+    - sync()
+
+  Data sources:
+    - SimpleFIN Bridge (primary): $15/year, daily sync, token-based
+    - CSV export (fallback): per-institution format normalization
+
+  Privacy: All data local. .env gitignored. data/ gitignored.
+
+  Conventions:
+    - Conventional commits
+    - Phases: foundation → simplefin-sync → mcp-server → csv-import → ai-categorize → dashboard
+    - Analysis functions return plain dicts/dataclasses (not ORM objects)
+    - Amounts: negative = debit, positive = credit (SimpleFIN convention)

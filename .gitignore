@@ -1,0 +1,20 @@
+# Financial data — never commit
+data/
+*.db
+*.duckdb
+*.sqlite
+
+# Secrets
+.env
+.env.*
+*.key
+plaid_tokens.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Misc
+.DS_Store

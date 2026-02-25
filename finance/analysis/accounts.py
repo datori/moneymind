@@ -2,6 +2,7 @@
 
 import sqlite3
 import time
+from datetime import date
 
 
 def get_accounts(conn: sqlite3.Connection) -> list[dict]:
@@ -81,6 +82,82 @@ def get_account_by_id(conn: sqlite3.Connection, account_id: str) -> dict | None:
         (account_id,),
     ).fetchone()
     return dict(row) if row else None
+
+
+def get_transaction_timeline(
+    conn: sqlite3.Connection,
+    account_id: str | None = None,
+    months: int = 13,
+) -> dict:
+    """Return monthly transaction counts per active account.
+
+    Args:
+        conn: An open SQLite connection with row_factory set.
+        account_id: If provided, returns data for only this account.
+        months: Number of calendar months to include (back from current month, inclusive).
+
+    Returns:
+        Dict with keys:
+            months: list of YYYY-MM strings, sorted ascending, length == months
+            accounts: list of {id, name, counts} where counts is zero-filled per month
+    """
+    today = date.today()
+
+    # Generate the list of months going back (months-1) from today, ascending
+    month_list: list[str] = []
+    for i in range(months - 1, -1, -1):
+        m = today.month - i
+        y = today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        month_list.append(f"{y:04d}-{m:02d}")
+
+    start_date = month_list[0] + "-01"
+
+    if account_id:
+        rows = conn.execute(
+            """
+            SELECT strftime('%Y-%m', date) AS month, account_id, COUNT(*) AS cnt
+            FROM transactions
+            WHERE account_id = ? AND date >= ?
+            GROUP BY month, account_id
+            """,
+            (account_id, start_date),
+        ).fetchall()
+        acct_rows = conn.execute(
+            "SELECT id, name FROM accounts WHERE active = 1 AND id = ? ORDER BY name",
+            (account_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT strftime('%Y-%m', date) AS month, account_id, COUNT(*) AS cnt
+            FROM transactions
+            WHERE date >= ?
+            GROUP BY month, account_id
+            """,
+            (start_date,),
+        ).fetchall()
+        acct_rows = conn.execute(
+            "SELECT id, name FROM accounts WHERE active = 1 ORDER BY name",
+        ).fetchall()
+
+    # Build lookup: {account_id: {month: count}}
+    count_map: dict[str, dict[str, int]] = {}
+    for r in rows:
+        aid = r["account_id"]
+        if aid not in count_map:
+            count_map[aid] = {}
+        count_map[aid][r["month"]] = r["cnt"]
+
+    accounts = []
+    for acct in acct_rows:
+        acct_counts = count_map.get(acct["id"], {})
+        counts = [acct_counts.get(m, 0) for m in month_list]
+        accounts.append({"id": acct["id"], "name": acct["name"], "counts": counts})
+
+    return {"months": month_list, "accounts": accounts}
 
 
 def get_credit_utilization(conn: sqlite3.Connection) -> dict:

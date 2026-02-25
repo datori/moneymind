@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from finance.ai.categories import CATEGORIES
-from finance.analysis.accounts import get_accounts, get_credit_utilization
+from finance.analysis.accounts import get_accounts, get_credit_utilization, get_transaction_timeline
 from finance.analysis.overview import get_data_overview
 from finance.analysis.net_worth import get_balance_history, get_net_worth
 from finance.analysis.review import get_recurring, get_review_queue
@@ -123,10 +123,11 @@ async def index(
 @app.get("/accounts", response_class=HTMLResponse)
 async def accounts_page(
     request: Request,
+    account_id: str | None = None,
     msg: str | None = None,
     conn: sqlite3.Connection = Depends(get_db),
 ):
-    """Unified account list: balances, data coverage, and delete actions."""
+    """Unified account list: balances, data coverage, delete actions, and timeline chart."""
     accounts = get_accounts(conn)
     overview = get_data_overview(conn)
 
@@ -152,6 +153,36 @@ async def accounts_page(
             "balance_count": balance_counts.get(acct["id"], 0),
         })
 
+    # Timeline chart data
+    from calendar import month_abbr
+
+    timeline = get_transaction_timeline(conn, account_id=account_id)
+
+    def _fmt_month(ym: str) -> str:
+        y, m = ym.split("-")
+        return f"{month_abbr[int(m)]} '{y[2:]}"
+
+    _palette = [
+        "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#3b82f6",
+        "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#84cc16",
+    ]
+    datasets = [
+        {
+            "label": acct["name"],
+            "data": acct["counts"],
+            "backgroundColor": _palette[i % len(_palette)],
+            "borderRadius": 2,
+        }
+        for i, acct in enumerate(timeline["accounts"])
+    ]
+    chart_data_json = json.dumps({
+        "labels": [_fmt_month(m) for m in timeline["months"]],
+        "datasets": datasets,
+    })
+    has_chart_data = any(
+        sum(acct["counts"]) > 0 for acct in timeline["accounts"]
+    )
+
     return templates.TemplateResponse(
         "accounts.html",
         {
@@ -159,6 +190,9 @@ async def accounts_page(
             "accounts": merged_accounts,
             "overview": overview,
             "msg": msg,
+            "chart_data_json": chart_data_json,
+            "has_chart_data": has_chart_data,
+            "selected_account_id": account_id,
         },
     )
 

@@ -16,6 +16,33 @@
 </div>
 {% endif %}
 
+<!-- Transaction Timeline Chart -->
+<div class="bg-white rounded-lg border border-gray-200 shadow-sm px-5 py-4 mb-6">
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <h2 class="text-sm font-semibold text-gray-700">Transaction Volume</h2>
+    <span class="text-gray-300 text-xs">last 13 months</span>
+    <form method="get" action="/accounts" class="ml-auto flex items-center gap-2">
+      <label class="text-xs text-gray-500">Account:</label>
+      <select name="account_id" onchange="this.form.submit()"
+              class="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400">
+        <option value="">All accounts</option>
+        {% for acct in accounts %}
+        <option value="{{ acct.id }}"{% if selected_account_id == acct.id %} selected{% endif %}>
+          {{ acct.name }}{% if acct.mask %} ···{{ acct.mask }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+  {% if has_chart_data %}
+  <div style="height: 220px;">
+    <canvas id="timelineChart"></canvas>
+  </div>
+  {% else %}
+  <p class="text-sm text-gray-400 text-center py-8">No transaction data available for the selected period.</p>
+  {% endif %}
+</div>
+
 {% if accounts %}
 <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
   <table class="w-full text-sm">
@@ -91,6 +118,53 @@
 {% else %}
 <p class="text-gray-500 text-sm">No accounts found. Run a sync to import your accounts.</p>
 {% endif %}
+
+<script>
+// Transaction timeline chart
+(function() {
+  const raw = {{ chart_data_json | safe }};
+  const canvas = document.getElementById('timelineChart');
+  if (!canvas || !raw.datasets || raw.datasets.length === 0) return;
+
+  const isStacked = raw.datasets.length > 1;
+
+  new Chart(canvas, {
+    type: 'bar',
+    data: raw,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: isStacked,
+          position: 'top',
+          labels: { boxWidth: 12, font: { size: 11 }, padding: 12 }
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y} txns`
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: isStacked,
+          grid: { display: false },
+          ticks: { font: { size: 11 } }
+        },
+        y: {
+          stacked: isStacked,
+          beginAtZero: true,
+          ticks: { precision: 0, font: { size: 11 } },
+          grid: { color: '#f3f4f6' }
+        }
+      }
+    }
+  });
+})();
+</script>
 
 <script>
 // Format date ranges as "Mon YY – Mon YY"

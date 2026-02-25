@@ -57,8 +57,8 @@ def get_net_worth(
         JOIN (
             SELECT account_id, balance, timestamp
             FROM balances b_inner
-            WHERE (account_id, timestamp) = (
-                SELECT account_id, MAX(timestamp)
+            WHERE b_inner.id = (
+                SELECT MAX(b2.id)
                 FROM balances b2
                 WHERE b2.account_id = b_inner.account_id
                 {timestamp_filter}

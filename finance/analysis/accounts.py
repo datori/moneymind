@@ -34,10 +34,8 @@ def get_accounts(conn: sqlite3.Connection) -> list[dict]:
         LEFT JOIN (
             SELECT account_id, balance, available, timestamp
             FROM balances
-            WHERE (account_id, timestamp) IN (
-                SELECT account_id, MAX(timestamp)
-                FROM balances
-                GROUP BY account_id
+            WHERE id IN (
+                SELECT MAX(id) FROM balances GROUP BY account_id
             )
         ) b ON b.account_id = a.id
         WHERE a.active = 1
@@ -74,10 +72,8 @@ def get_account_by_id(conn: sqlite3.Connection, account_id: str) -> dict | None:
         LEFT JOIN (
             SELECT account_id, balance, available, timestamp
             FROM balances
-            WHERE (account_id, timestamp) IN (
-                SELECT account_id, MAX(timestamp)
-                FROM balances
-                GROUP BY account_id
+            WHERE id IN (
+                SELECT MAX(id) FROM balances GROUP BY account_id
             )
         ) b ON b.account_id = a.id
         WHERE a.active = 1 AND a.id = ?
@@ -115,10 +111,8 @@ def get_credit_utilization(conn: sqlite3.Connection) -> dict:
         LEFT JOIN (
             SELECT account_id, balance, available, timestamp
             FROM balances
-            WHERE (account_id, timestamp) IN (
-                SELECT account_id, MAX(timestamp)
-                FROM balances
-                GROUP BY account_id
+            WHERE id IN (
+                SELECT MAX(id) FROM balances GROUP BY account_id
             )
         ) b ON b.account_id = a.id
         LEFT JOIN credit_limits cl ON cl.account_id = a.id

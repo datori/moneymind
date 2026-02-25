@@ -117,3 +117,18 @@ def init_db(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             pass  # column already exists
     conn.commit()
+
+    # Balance snapshot deduplication: remove exact (account_id, timestamp) duplicates
+    # keeping the earliest row (MIN id), then enforce uniqueness going forward.
+    conn.execute(
+        """
+        DELETE FROM balances
+        WHERE id NOT IN (
+            SELECT MIN(id) FROM balances GROUP BY account_id, timestamp
+        )
+        """
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_balances_account_ts ON balances(account_id, timestamp)"
+    )
+    conn.commit()

@@ -59,7 +59,7 @@ CREATE TABLE accounts (
 ---
 
 ### Requirement: balances table
-The system SHALL maintain a `balances` table as an append-only time-series of balance snapshots.
+The system SHALL maintain a `balances` table as a time-series of balance snapshots, deduplicated on `(account_id, timestamp)`. A `UNIQUE INDEX` on those two columns ensures that if SimpleFIN returns the same `balance-date` on multiple syncs, only one row is stored.
 
 Schema:
 ```sql
@@ -70,11 +70,16 @@ CREATE TABLE balances (
     balance    REAL,
     available  REAL
 );
+CREATE UNIQUE INDEX uq_balances_account_ts ON balances(account_id, timestamp);
 ```
 
-#### Scenario: Balance snapshot appended
-- **WHEN** a sync runs for an account
-- **THEN** a new balance row is inserted (existing rows are never updated)
+#### Scenario: Balance snapshot inserted (first time for this timestamp)
+- **WHEN** a sync runs and SimpleFIN returns a `balance-date` not yet stored for that account
+- **THEN** a new balance row is inserted
+
+#### Scenario: Balance snapshot skipped (duplicate timestamp)
+- **WHEN** a sync runs and SimpleFIN returns the same `balance-date` as a previously stored snapshot for that account
+- **THEN** the insert is silently skipped (`INSERT OR IGNORE`); no duplicate row is created
 
 ---
 

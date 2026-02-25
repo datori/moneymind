@@ -21,7 +21,7 @@ The system SHALL fetch account data from the SimpleFIN `/accounts` endpoint and 
 #### Scenario: Successful sync
 - **WHEN** `finance sync` is run with `SIMPLEFIN_ACCESS_URL` configured
 - **THEN** all accounts returned by SimpleFIN are upserted into `accounts` and `institutions` tables
-- **AND** a balance snapshot is appended to `balances` for each account
+- **AND** a balance snapshot is inserted into `balances` for each account (skipped if a snapshot with the same `account_id` and `balance-date` timestamp already exists)
 - **AND** new transactions are inserted into `transactions` (existing IDs skipped)
 - **AND** `sync_state.last_synced_at` is updated for each account
 

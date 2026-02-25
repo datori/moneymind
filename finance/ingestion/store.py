@@ -81,7 +81,7 @@ def insert_balance_snapshot(
     timestamp_ms: int = timestamp_s * 1000
     conn.execute(
         """
-        INSERT INTO balances (account_id, timestamp, balance, available)
+        INSERT OR IGNORE INTO balances (account_id, timestamp, balance, available)
         VALUES (?, ?, ?, ?)
         """,
         (account_id, timestamp_ms, balance, available),

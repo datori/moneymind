@@ -410,12 +410,54 @@ async def pipeline_page(
             "SELECT * FROM run_log ORDER BY started_at DESC LIMIT 20"
         ).fetchall()
         runs = [dict(r) for r in runs]
+        # Parse summary JSON for template access
+        for run in runs:
+            if run.get("summary"):
+                try:
+                    run["summary"] = json.loads(run["summary"])
+                except (json.JSONDecodeError, TypeError):
+                    run["summary"] = None
     except sqlite3.OperationalError:
         runs = []
 
+    # Current transaction state
+    try:
+        total_txns = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+        uncategorized = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE category IS NULL"
+        ).fetchone()[0]
+        recurring = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE is_recurring = 1"
+        ).fetchone()[0]
+        needs_review = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE needs_review = 1"
+        ).fetchone()[0]
+        cat_rows = conn.execute(
+            """
+            SELECT category, COUNT(*) as cnt
+            FROM transactions
+            WHERE category IS NOT NULL
+            GROUP BY category
+            ORDER BY cnt DESC
+            """
+        ).fetchall()
+        categories = [{"category": r["category"], "count": r["cnt"]} for r in cat_rows]
+        current_state = {
+            "total": total_txns,
+            "uncategorized": uncategorized,
+            "recurring": recurring,
+            "needs_review": needs_review,
+            "categories": categories,
+        }
+    except sqlite3.OperationalError:
+        current_state = {
+            "total": 0, "uncategorized": 0, "recurring": 0,
+            "needs_review": 0, "categories": [],
+        }
+
     return templates.TemplateResponse(
         "pipeline.html",
-        {"request": request, "runs": runs},
+        {"request": request, "runs": runs, "current_state": current_state},
     )
 
 

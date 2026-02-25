@@ -402,6 +402,7 @@ def run_pipeline(
             emit(event)
 
     total_updated = 0
+    new_transactions = 0  # set in sync step; used in run summary
 
     try:
         # -------------------------------------------------------------------
@@ -420,20 +421,30 @@ def run_pipeline(
             sync_step_id = sync_step_cursor.lastrowid
 
             new_transactions = 0
+            accounts_synced = 0
             sync_error = None
             try:
                 from finance.ingestion.sync import sync_all
 
                 sync_result = sync_all(conn)
                 new_transactions = sync_result.get("new_transactions", 0)
+                accounts_synced = sync_result.get("accounts_updated", 0)
             except Exception as exc:  # noqa: BLE001
                 sync_error = str(exc)
                 logger.warning("Sync step failed (non-fatal): %s", exc)
 
             sync_step_end = now_ms()
+            sync_response_summary = json.dumps({
+                "accounts_synced": accounts_synced,
+                "new_transactions": new_transactions,
+            })
             conn.execute(
-                "UPDATE run_steps SET finished_at = ?, error_msg = ? WHERE id = ?",
-                (sync_step_end, sync_error, sync_step_id),
+                """
+                UPDATE run_steps
+                SET finished_at = ?, error_msg = ?, response_summary = ?
+                WHERE id = ?
+                """,
+                (sync_step_end, sync_error, sync_response_summary, sync_step_id),
             )
             conn.commit()
 
@@ -441,7 +452,7 @@ def run_pipeline(
                 "type": "step_done",
                 "step": "sync",
                 "ts": sync_step_end,
-                "data": {"new_transactions": new_transactions},
+                "data": {"new_transactions": new_transactions, "accounts_synced": accounts_synced},
             })
 
         # -------------------------------------------------------------------
@@ -465,13 +476,17 @@ def run_pipeline(
             "transaction_count": transaction_count,
             "cluster_count": cluster_count,
         })
+        cluster_response_summary = json.dumps({
+            "transaction_count": transaction_count,
+            "cluster_count": cluster_count,
+        })
         conn.execute(
             """
             INSERT INTO run_steps
-                (run_id, step_type, started_at, finished_at, request_summary)
-            VALUES (?, 'cluster-build', ?, ?, ?)
+                (run_id, step_type, started_at, finished_at, request_summary, response_summary)
+            VALUES (?, 'cluster-build', ?, ?, ?, ?)
             """,
-            (run_id, cluster_step_start, cluster_step_end, cluster_request_summary),
+            (run_id, cluster_step_start, cluster_step_end, cluster_request_summary, cluster_response_summary),
         )
         conn.commit()
 
@@ -487,8 +502,18 @@ def run_pipeline(
             # Mark run as success
             run_end = now_ms()
             conn.execute(
-                "UPDATE run_log SET status = 'success', finished_at = ? WHERE id = ?",
-                (run_end, run_id),
+                "UPDATE run_log SET status = 'success', finished_at = ?, summary = ? WHERE id = ?",
+                (run_end, json.dumps({
+                    "transactions_synced": new_transactions if run_sync else 0,
+                    "clusters_built": 0,
+                    "batches_processed": 0,
+                    "transactions_enriched": 0,
+                    "categories": {},
+                    "recurring_count": 0,
+                    "review_count": 0,
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                }), run_id),
             )
             conn.commit()
             _emit({
@@ -508,6 +533,12 @@ def run_pipeline(
         # Step 3: Enrich batches
         # -------------------------------------------------------------------
         batch_total = (len(clusters) + _CLUSTER_BATCH_SIZE - 1) // _CLUSTER_BATCH_SIZE
+
+        # Accumulators for run-level summary
+        run_categories: dict[str, int] = {}
+        run_tokens_in = 0
+        run_tokens_out = 0
+        run_batches_processed = 0
 
         for batch_num, i in enumerate(range(0, len(clusters), _CLUSTER_BATCH_SIZE), start=1):
             batch = clusters[i : i + _CLUSTER_BATCH_SIZE]
@@ -591,12 +622,19 @@ def run_pipeline(
 
             batch_end = now_ms()
 
-            # Build response summary
-            categories_assigned = [r.get("category", "Other") for r in results]
-            recurring_count = sum(1 for r in results if r.get("is_recurring"))
+            # Build response summary — categories as count dict (per-transaction)
+            categories_count: dict[str, int] = {}
+            for r in results:
+                cat = r.get("category", "Other")
+                txn_ids = cluster_lookup.get(r.get("merchant_key", ""), [])
+                categories_count[cat] = categories_count.get(cat, 0) + len(txn_ids)
+            recurring_count = sum(
+                len(cluster_lookup.get(r.get("merchant_key", ""), []))
+                for r in results if r.get("is_recurring")
+            )
             response_summary_dict = {
                 "cluster_count": len(results),
-                "categories_assigned": categories_assigned,
+                "categories_assigned": categories_count,
                 "recurring_count": recurring_count,
             }
             response_summary = json.dumps(response_summary_dict)
@@ -614,6 +652,13 @@ def run_pipeline(
                 (batch_end, response_summary, tokens_in, tokens_out, batch_step_id),
             )
             conn.commit()
+
+            # Accumulate run-level stats
+            run_tokens_in += tokens_in
+            run_tokens_out += tokens_out
+            run_batches_processed += 1
+            for cat, cnt in categories_count.items():
+                run_categories[cat] = run_categories.get(cat, 0) + cnt
 
             # Write results to transactions table
             try:
@@ -649,12 +694,29 @@ def run_pipeline(
             })
 
         # -------------------------------------------------------------------
-        # All batches complete — mark run as success
+        # All batches complete — mark run as success, write aggregate summary
         # -------------------------------------------------------------------
         run_end = now_ms()
+        run_recurring = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE is_recurring = 1"
+        ).fetchone()[0]
+        run_review = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE needs_review = 1"
+        ).fetchone()[0]
+        run_summary = json.dumps({
+            "transactions_synced": new_transactions if run_sync else 0,
+            "clusters_built": cluster_count,
+            "batches_processed": run_batches_processed,
+            "transactions_enriched": total_updated,
+            "categories": run_categories,
+            "recurring_count": run_recurring,
+            "review_count": run_review,
+            "tokens_in": run_tokens_in,
+            "tokens_out": run_tokens_out,
+        })
         conn.execute(
-            "UPDATE run_log SET status = 'success', finished_at = ? WHERE id = ?",
-            (run_end, run_id),
+            "UPDATE run_log SET status = 'success', finished_at = ?, summary = ? WHERE id = ?",
+            (run_end, run_summary, run_id),
         )
         conn.commit()
 

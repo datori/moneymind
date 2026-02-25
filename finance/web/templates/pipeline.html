@@ -4,6 +4,54 @@
 {% block content %}
 <h1 class="text-2xl font-bold mb-6">Pipeline</h1>
 
+<!-- Current State panel -->
+<section class="mb-6">
+  <h2 class="text-lg font-semibold mb-3 text-gray-700">Current State</h2>
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+    <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
+      <p class="text-2xl font-bold text-gray-800">{{ current_state.total }}</p>
+      <p class="text-xs text-gray-500 mt-1">Total Transactions</p>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
+      <p class="text-2xl font-bold {% if current_state.uncategorized > 0 %}text-yellow-600{% else %}text-green-600{% endif %}">
+        {{ current_state.uncategorized }}
+      </p>
+      <p class="text-xs text-gray-500 mt-1">Uncategorized</p>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
+      <p class="text-2xl font-bold text-indigo-600">{{ current_state.recurring }}</p>
+      <p class="text-xs text-gray-500 mt-1">Recurring</p>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4 text-center">
+      <p class="text-2xl font-bold {% if current_state.needs_review > 0 %}text-orange-600{% else %}text-green-600{% endif %}">
+        {{ current_state.needs_review }}
+      </p>
+      <p class="text-xs text-gray-500 mt-1">Needs Review</p>
+    </div>
+  </div>
+
+  {% if current_state.categories %}
+  <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+        <tr>
+          <th class="px-4 py-2 text-left">Category</th>
+          <th class="px-4 py-2 text-right">Transactions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in current_state.categories %}
+        <tr class="border-t border-gray-100">
+          <td class="px-4 py-2">{{ row.category }}</td>
+          <td class="px-4 py-2 text-right text-gray-600">{{ row.count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
 <!-- Run Pipeline button and streaming panel -->
 <section class="mb-8">
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
@@ -46,6 +94,8 @@
           <th class="px-4 py-2 text-left">Started</th>
           <th class="px-4 py-2 text-left">Duration</th>
           <th class="px-4 py-2 text-left">Status</th>
+          <th class="px-4 py-2 text-right">Txns</th>
+          <th class="px-4 py-2 text-right">Tokens</th>
           <th class="px-4 py-2 text-left">Error</th>
         </tr>
       </thead>
@@ -77,6 +127,20 @@
               <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">running</span>
             {% else %}
               <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{ run.status }}</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-right text-gray-600">
+            {% if run.summary and run.summary.transactions_enriched is defined %}
+              {{ run.summary.transactions_enriched }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-right text-gray-600">
+            {% if run.summary and run.summary.tokens_in is defined %}
+              {{ (run.summary.tokens_in + run.summary.tokens_out) | int }}
+            {% else %}
+              —
             {% endif %}
           </td>
           <td class="px-4 py-2 text-red-600 text-xs">{{ run.error_msg or '' }}</td>
@@ -117,11 +181,25 @@
     return evt.step || 'run';
   }
 
+  function renderCategoryPills(categoriesAssigned) {
+    if (!categoriesAssigned || typeof categoriesAssigned !== 'object') return '';
+    // Sort by count desc, take top 5
+    var entries = Object.entries(categoriesAssigned).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
+    if (entries.length === 0) return '';
+    var pills = entries.map(function(entry) {
+      var cat = entry[0];
+      var cnt = entry[1];
+      var label = cnt > 1 ? cat + ' &times;' + cnt : cat;
+      return '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-indigo-100 text-indigo-700 mr-1">' + label + '</span>';
+    });
+    return '<div class="mt-1 flex flex-wrap gap-1">' + pills.join('') + '</div>';
+  }
+
   function appendStep(key, html) {
     var list = document.getElementById('step-list');
     var div = document.createElement('div');
     div.id = 'step-row-' + key;
-    div.className = 'px-4 py-2 flex items-center gap-3';
+    div.className = 'px-4 py-2';
     div.innerHTML = html;
     list.appendChild(div);
     stepRows[key] = div;
@@ -180,9 +258,11 @@
       if (evt.type === 'step_start') {
         stepStartTimes[key] = ts;
         appendStep(key,
+          '<div class="flex items-center gap-3">' +
           spinnerIcon() +
           '<span class="text-gray-700 flex-1">' + name + '</span>' +
-          '<span class="text-gray-400 text-xs">' + formatTs(ts) + '</span>'
+          '<span class="text-gray-400 text-xs">' + formatTs(ts) + '</span>' +
+          '</div>'
         );
       } else if (evt.type === 'step_done') {
         var elapsed = stepStartTimes[key] ? (ts - stepStartTimes[key]) : 0;
@@ -191,15 +271,28 @@
           extra = ' &mdash; ' + evt.data.tokens_in + ' in / ' + evt.data.tokens_out + ' out tokens';
         }
         if (evt.data && evt.data.new_transactions != null) {
-          extra = ' &mdash; ' + evt.data.new_transactions + ' new transactions';
+          extra = ' &mdash; ' + evt.data.new_transactions + ' new txns';
+          if (evt.data.accounts_synced != null) {
+            extra += ', ' + evt.data.accounts_synced + ' accounts';
+          }
         }
         if (evt.data && evt.data.cluster_count != null && evt.step === 'cluster-build') {
           extra = ' &mdash; ' + evt.data.cluster_count + ' clusters, ' + evt.data.transaction_count + ' transactions';
         }
+
+        // Category pills for enrich-batch steps
+        var pills = '';
+        if (evt.step === 'enrich-batch' && evt.data && evt.data.response_summary) {
+          pills = renderCategoryPills(evt.data.response_summary.categories_assigned);
+        }
+
         updateStep(key,
+          '<div class="flex items-center gap-3">' +
           checkIcon() +
           '<span class="text-gray-700 flex-1">' + name + extra + '</span>' +
-          '<span class="text-gray-400 text-xs">' + elapsed + 'ms</span>'
+          '<span class="text-gray-400 text-xs">' + elapsed + 'ms</span>' +
+          '</div>' +
+          pills
         );
       } else if (evt.type === 'error') {
         var errMsg = evt.data && evt.data.message ? evt.data.message : 'Unknown error';
@@ -208,8 +301,10 @@
         if (isStep) {
           // Per-step error — show in row, continue
           updateStep(key,
+            '<div class="flex items-center gap-3">' +
             errorIcon() +
-            '<span class="text-red-700 flex-1">' + name + ' &mdash; ' + errMsg + '</span>'
+            '<span class="text-red-700 flex-1">' + name + ' &mdash; ' + errMsg + '</span>' +
+            '</div>'
           );
         } else {
           // Catastrophic error
@@ -232,7 +327,7 @@
         btn.disabled = false;
         es.close();
 
-        // Reload to refresh run history table
+        // Reload to refresh run history table and current state
         setTimeout(function() { location.reload(); }, 1500);
       }
     };

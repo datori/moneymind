@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS run_log (
     started_at  INTEGER NOT NULL,
     finished_at INTEGER,
     status      TEXT NOT NULL DEFAULT 'running',
-    error_msg   TEXT
+    error_msg   TEXT,
+    summary     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS run_steps (
@@ -108,6 +109,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         "ALTER TABLE transactions ADD COLUMN review_reason TEXT",
         "ALTER TABLE transactions ADD COLUMN is_recurring INTEGER DEFAULT 0",
         "ALTER TABLE transactions ADD COLUMN merchant_normalized TEXT",
+        "ALTER TABLE run_log ADD COLUMN summary TEXT",
     ]
     for stmt in _migrations:
         try:

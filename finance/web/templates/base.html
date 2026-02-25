@@ -12,24 +12,61 @@
   <!-- Navigation -->
   <nav class="bg-white border-b border-gray-200 shadow-sm">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <!-- Logo + desktop links -->
       <div class="flex items-center gap-6">
         <span class="font-bold text-lg text-indigo-700">Finance</span>
-        <a href="/" class="text-sm hover:text-indigo-600 {% if request.url.path == '/' %}font-semibold text-indigo-600{% endif %}">Dashboard</a>
-        <a href="/accounts" class="text-sm hover:text-indigo-600 {% if request.url.path == '/accounts' %}font-semibold text-indigo-600{% endif %}">Accounts</a>
-        <a href="/transactions" class="text-sm hover:text-indigo-600 {% if request.url.path == '/transactions' %}font-semibold text-indigo-600{% endif %}">Transactions</a>
-        <a href="/net-worth" class="text-sm hover:text-indigo-600 {% if request.url.path == '/net-worth' %}font-semibold text-indigo-600{% endif %}">Net Worth</a>
-        <a href="/spending" class="text-sm hover:text-indigo-600 {% if request.url.path == '/spending' %}font-semibold text-indigo-600{% endif %}">Spending</a>
-        <a href="/review" class="text-sm hover:text-indigo-600 {% if request.url.path == '/review' %}font-semibold text-indigo-600{% endif %}">Review</a>
-        <a href="/recurring" class="text-sm hover:text-indigo-600 {% if request.url.path == '/recurring' %}font-semibold text-indigo-600{% endif %}">Recurring</a>
-        <a href="/pipeline" class="text-sm hover:text-indigo-600 {% if request.url.path == '/pipeline' %}font-semibold text-indigo-600{% endif %}">Pipeline</a>
+        <div class="hidden md:flex items-center gap-6">
+          <a href="/" class="text-sm hover:text-indigo-600 {% if request.url.path == '/' %}font-semibold text-indigo-600{% endif %}">Dashboard</a>
+          <a href="/accounts" class="text-sm hover:text-indigo-600 {% if request.url.path == '/accounts' %}font-semibold text-indigo-600{% endif %}">Accounts</a>
+          <a href="/transactions" class="text-sm hover:text-indigo-600 {% if request.url.path == '/transactions' %}font-semibold text-indigo-600{% endif %}">Transactions</a>
+          <a href="/net-worth" class="text-sm hover:text-indigo-600 {% if request.url.path == '/net-worth' %}font-semibold text-indigo-600{% endif %}">Net Worth</a>
+          <a href="/spending" class="text-sm hover:text-indigo-600 {% if request.url.path == '/spending' %}font-semibold text-indigo-600{% endif %}">Spending</a>
+          <a href="/review" class="text-sm hover:text-indigo-600 {% if request.url.path == '/review' %}font-semibold text-indigo-600{% endif %}">Review</a>
+          <a href="/recurring" class="text-sm hover:text-indigo-600 {% if request.url.path == '/recurring' %}font-semibold text-indigo-600{% endif %}">Recurring</a>
+          <a href="/pipeline" class="text-sm hover:text-indigo-600 {% if request.url.path == '/pipeline' %}font-semibold text-indigo-600{% endif %}">Pipeline</a>
+        </div>
       </div>
-      <!-- Sync Now button -->
-      <form method="post" action="/sync">
+      <!-- Desktop: Sync Now -->
+      <form method="post" action="/sync" class="hidden md:block">
         <button type="submit"
           class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors">
           Sync Now
         </button>
       </form>
+      <!-- Mobile: hamburger button -->
+      <button
+        id="mobile-menu-btn"
+        class="md:hidden p-2 rounded-md text-gray-600 hover:text-indigo-600 hover:bg-gray-100 transition-colors"
+        aria-label="Toggle menu"
+        onclick="document.getElementById('mobile-menu').classList.toggle('hidden')"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Mobile menu panel (hidden by default) -->
+    <div id="mobile-menu" class="hidden md:hidden border-t border-gray-100 bg-white">
+      <div class="flex flex-col px-4 py-3 gap-3">
+        <a href="/" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/' %}font-semibold text-indigo-600{% endif %}">Dashboard</a>
+        <a href="/accounts" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/accounts' %}font-semibold text-indigo-600{% endif %}">Accounts</a>
+        <a href="/transactions" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/transactions' %}font-semibold text-indigo-600{% endif %}">Transactions</a>
+        <a href="/net-worth" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/net-worth' %}font-semibold text-indigo-600{% endif %}">Net Worth</a>
+        <a href="/spending" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/spending' %}font-semibold text-indigo-600{% endif %}">Spending</a>
+        <a href="/review" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/review' %}font-semibold text-indigo-600{% endif %}">Review</a>
+        <a href="/recurring" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/recurring' %}font-semibold text-indigo-600{% endif %}">Recurring</a>
+        <a href="/pipeline" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/pipeline' %}font-semibold text-indigo-600{% endif %}">Pipeline</a>
+        <div class="pt-1 border-t border-gray-100">
+          <form method="post" action="/sync">
+            <button type="submit"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors">
+              Sync Now
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   </nav>
 

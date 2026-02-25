@@ -13,24 +13,62 @@
     <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
       <tr>
         <th class="px-4 py-3 text-left">Merchant</th>
+        <th class="px-4 py-3 text-right">Interval</th>
+        <th class="px-4 py-3 text-right">Typical</th>
+        <th class="px-4 py-3 text-right">Total Spent</th>
         <th class="px-4 py-3 text-right">Occurrences</th>
-        <th class="px-4 py-3 text-right">Typical Amount</th>
+        <th class="px-4 py-3 text-left">Status</th>
       </tr>
     </thead>
     <tbody>
       {% for item in recurring %}
       <tr class="border-t border-gray-100 hover:bg-gray-50">
-        <td class="px-4 py-2 font-medium">{{ item.merchant_normalized }}</td>
-        <td class="px-4 py-2 text-right text-gray-600">{{ item.count }}</td>
+        <!-- Merchant name links to transaction search -->
+        <td class="px-4 py-2 font-medium">
+          <a href="/transactions?search={{ item.merchant_normalized | urlencode }}&sort_by=amount&sort_dir=desc"
+             class="text-indigo-600 hover:underline">{{ item.merchant_normalized }}</a>
+        </td>
+        <td class="px-4 py-2 text-right text-gray-600">
+          {{ item.interval_label or '—' }}
+        </td>
         <td class="px-4 py-2 text-right font-medium text-gray-800">
           ${{ "%.2f"|format(item.typical_amount) }}
+        </td>
+        <td class="px-4 py-2 text-right text-gray-700">
+          ${{ "%.2f"|format(item.total_spent) }}
+        </td>
+        <td class="px-4 py-2 text-right text-gray-600">{{ item.count }}</td>
+        <td class="px-4 py-2">
+          {% if item.status == 'past_due' %}
+            {% set n = item.days_until_next | abs %}
+            {% if n > 60 %}
+              {% set months = (n / 30) | int %}
+              <span class="text-red-600 font-medium">Past due ~{{ months }}mo</span>
+            {% else %}
+              <span class="text-red-600 font-medium">Past due {{ n }}d</span>
+            {% endif %}
+          {% elif item.status == 'due_any_day' %}
+            <span class="text-blue-600 font-medium">Due any day</span>
+          {% elif item.status == 'due_soon' %}
+            <span class="text-amber-600 font-medium">Due in {{ item.days_until_next }}d</span>
+          {% elif item.status == 'upcoming' %}
+            {% set n = item.days_until_next %}
+            {% if n > 30 %}
+              {% set months = (n / 30) | int %}
+              <span class="text-gray-500">Due in ~{{ months }}mo</span>
+            {% else %}
+              <span class="text-gray-500">Due in {{ n }}d</span>
+            {% endif %}
+          {% else %}
+            <span class="text-gray-400">—</span>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
-<p class="text-xs text-gray-400 mt-2">{{ recurring | length }} recurring merchant(s).</p>
+<p class="text-xs text-gray-400 mt-2">{{ recurring | length }} recurring merchant(s). Status based on last charge date and inferred interval.</p>
 {% else %}
 <p class="text-gray-500 text-sm">No recurring charges detected.</p>
 {% endif %}

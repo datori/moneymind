@@ -13,6 +13,9 @@ def get_transactions(
     category: str | None = None,
     min_amount: float | None = None,
     max_amount: float | None = None,
+    search: str | None = None,
+    sort_by: str = "date",
+    sort_dir: str = "desc",
     limit: int = 100,
 ) -> list[dict]:
     """Return transactions matching the given filters.
@@ -27,6 +30,9 @@ def get_transactions(
         category: Filter to a specific category (exact match).
         min_amount: Inclusive lower bound on amount.
         max_amount: Inclusive upper bound on amount.
+        search: Substring match against description, merchant_name, merchant_normalized.
+        sort_by: Column to sort by: "date" (default) or "amount".
+        sort_dir: Sort direction: "desc" (default) or "asc".
         limit: Maximum number of rows to return (default 100).
 
     Returns:
@@ -69,8 +75,19 @@ def get_transactions(
     if max_amount is not None:
         sql += " AND t.amount <= ?"
         params.append(max_amount)
+    if search:
+        sql += " AND (t.description LIKE ? OR t.merchant_name LIKE ? OR t.merchant_normalized LIKE ?)"
+        pattern = f"%{search}%"
+        params.extend([pattern, pattern, pattern])
 
-    sql += " ORDER BY t.date DESC, t.id LIMIT ?"
+    # Safe allowlist for ORDER BY — never interpolate user input directly
+    _dir = "ASC" if sort_dir == "asc" else "DESC"
+    if sort_by == "amount":
+        sql += f" ORDER BY ABS(t.amount) {_dir}, t.date DESC"
+    else:
+        sql += f" ORDER BY t.date {_dir}, t.id"
+
+    sql += " LIMIT ?"
     params.append(limit)
 
     rows = conn.execute(sql, params).fetchall()

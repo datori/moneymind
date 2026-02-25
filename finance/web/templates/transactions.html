@@ -7,6 +7,17 @@
 
 <!-- Filter form -->
 <form method="get" action="/transactions" class="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-6 flex flex-wrap gap-4 items-end">
+  <!-- Month navigation -->
+  <div>
+    <label class="block text-xs text-gray-500 mb-1">Month</label>
+    <div class="flex items-center gap-1">
+      <button type="button" id="prevMonth"
+        class="px-2 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">‹</button>
+      <span id="monthLabel" class="text-sm font-medium text-gray-700 w-24 text-center"></span>
+      <button type="button" id="nextMonth"
+        class="px-2 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">›</button>
+    </div>
+  </div>
   <div>
     <label class="block text-xs text-gray-500 mb-1" for="start">Start date</label>
     <input id="start" name="start" type="date" value="{{ start }}"
@@ -18,9 +29,10 @@
       class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
   </div>
   <div>
-    <label class="block text-xs text-gray-500 mb-1" for="limit">Limit</label>
-    <input id="limit" name="limit" type="number" min="1" max="1000" value="{{ limit }}"
-      class="border border-gray-300 rounded px-3 py-1.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+    <label class="block text-xs text-gray-500 mb-1" for="search">Search</label>
+    <input id="search" name="search" type="text" value="{{ search }}"
+      placeholder="merchant or description"
+      class="border border-gray-300 rounded px-3 py-1.5 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
   </div>
   <div>
     <label class="block text-xs text-gray-500 mb-1" for="category">Category</label>
@@ -32,6 +44,14 @@
       {% endfor %}
     </select>
   </div>
+  <div>
+    <label class="block text-xs text-gray-500 mb-1" for="limit">Limit</label>
+    <input id="limit" name="limit" type="number" min="1" max="1000" value="{{ limit }}"
+      class="border border-gray-300 rounded px-3 py-1.5 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+  </div>
+  <!-- Preserve sort state across filter submissions -->
+  <input type="hidden" name="sort_by" value="{{ sort_by }}">
+  <input type="hidden" name="sort_dir" value="{{ sort_dir }}">
   <button type="submit"
     class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors">
     Filter
@@ -43,12 +63,40 @@
   <table class="w-full text-sm">
     <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
       <tr>
-        <th class="px-4 py-3 text-left">Date</th>
+        {# Build sort URLs preserving all current params #}
+        {% set base_params = "start=" ~ start ~ "&end=" ~ end ~ "&limit=" ~ limit ~ ("&category=" ~ category if category else "") ~ ("&search=" ~ search if search else "") %}
+        {# Date column header #}
+        {% if sort_by == "date" %}
+          {% set date_dir = "asc" if sort_dir == "desc" else "desc" %}
+          {% set date_arrow = "▼" if sort_dir == "desc" else "▲" %}
+        {% else %}
+          {% set date_dir = "desc" %}
+          {% set date_arrow = "" %}
+        {% endif %}
+        {# Amount column header #}
+        {% if sort_by == "amount" %}
+          {% set amt_dir = "asc" if sort_dir == "desc" else "desc" %}
+          {% set amt_arrow = "▼" if sort_dir == "desc" else "▲" %}
+        {% else %}
+          {% set amt_dir = "desc" %}
+          {% set amt_arrow = "" %}
+        {% endif %}
+        <th class="px-4 py-3 text-left">
+          <a href="/transactions?{{ base_params }}&sort_by=date&sort_dir={{ date_dir }}"
+             class="hover:text-gray-700 {% if sort_by == 'date' %}text-gray-700{% endif %}">
+            Date {{ date_arrow }}
+          </a>
+        </th>
         <th class="px-4 py-3 text-left">Description</th>
         <th class="px-4 py-3 text-left">Merchant</th>
         <th class="px-4 py-3 text-left">Category</th>
         <th class="px-4 py-3 text-left">Account</th>
-        <th class="px-4 py-3 text-right">Amount</th>
+        <th class="px-4 py-3 text-right">
+          <a href="/transactions?{{ base_params }}&sort_by=amount&sort_dir={{ amt_dir }}"
+             class="hover:text-gray-700 {% if sort_by == 'amount' %}text-gray-700{% endif %}">
+            Amount {{ amt_arrow }}
+          </a>
+        </th>
         <th class="px-4 py-3 text-center">Pending</th>
       </tr>
     </thead>
@@ -75,4 +123,53 @@
 {% else %}
 <p class="text-gray-500 text-sm">No transactions found for the selected range.</p>
 {% endif %}
+
+<script>
+(function () {
+  var startEl = document.getElementById('start');
+  var endEl = document.getElementById('end');
+  var label = document.getElementById('monthLabel');
+
+  function parseMonth(dateStr) {
+    if (!dateStr) return null;
+    var parts = dateStr.split('-');
+    if (parts.length < 2) return null;
+    return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10) };
+  }
+
+  function lastDay(year, month) {
+    return new Date(year, month, 0).getDate();
+  }
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function updateLabel() {
+    var m = parseMonth(startEl.value);
+    if (!m) { label.textContent = ''; return; }
+    var d = new Date(m.year, m.month - 1, 1);
+    label.textContent = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  }
+
+  function navigate(delta) {
+    var m = parseMonth(startEl.value);
+    if (!m) {
+      var now = new Date();
+      m = { year: now.getFullYear(), month: now.getMonth() + 1 };
+    }
+    var newMonth = m.month + delta;
+    var newYear = m.year;
+    if (newMonth > 12) { newMonth = 1; newYear++; }
+    if (newMonth < 1)  { newMonth = 12; newYear--; }
+    var ld = lastDay(newYear, newMonth);
+    startEl.value = newYear + '-' + pad(newMonth) + '-01';
+    endEl.value   = newYear + '-' + pad(newMonth) + '-' + pad(ld);
+    updateLabel();
+    startEl.form.submit();
+  }
+
+  document.getElementById('prevMonth').addEventListener('click', function() { navigate(-1); });
+  document.getElementById('nextMonth').addEventListener('click', function() { navigate(1); });
+  updateLabel();
+})();
+</script>
 {% endblock %}

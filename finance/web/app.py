@@ -212,15 +212,21 @@ async def transactions_page(
     end: str | None = None,
     limit: int = 100,
     category: str | None = None,
+    search: str | None = None,
+    sort_by: str = "date",
+    sort_dir: str = "desc",
     conn: sqlite3.Connection = Depends(get_db),
 ):
-    """Transaction browser with date range and category filters."""
+    """Transaction browser with date range, category, search, and sort filters."""
     txns = get_transactions(
         conn,
-        start_date=start,
-        end_date=end,
+        start_date=start or None,
+        end_date=end or None,
         limit=limit,
-        category=category,
+        category=category or None,
+        search=search or None,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     return templates.TemplateResponse(
         "transactions.html",
@@ -232,6 +238,9 @@ async def transactions_page(
             "limit": limit,
             "categories": CATEGORIES,
             "category": category or "",
+            "search": search or "",
+            "sort_by": sort_by,
+            "sort_dir": sort_dir,
         },
     )
 

@@ -7,6 +7,17 @@
 
 <!-- Filter form -->
 <form method="get" action="/spending" class="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-6 flex flex-wrap gap-4 items-end">
+  <!-- Month navigation -->
+  <div>
+    <label class="block text-xs text-gray-500 mb-1">Month</label>
+    <div class="flex items-center gap-1">
+      <button type="button" id="prevMonth"
+        class="px-2 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">‹</button>
+      <span id="monthLabel" class="text-sm font-medium text-gray-700 w-24 text-center"></span>
+      <button type="button" id="nextMonth"
+        class="px-2 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50 transition-colors">›</button>
+    </div>
+  </div>
   <div>
     <label class="block text-xs text-gray-500 mb-1" for="start">Start date</label>
     <input id="start" name="start" type="date" value="{{ start }}"
@@ -58,8 +69,18 @@
       </thead>
       <tbody>
         {% for row in spending %}
-        <tr class="border-t border-gray-100">
-          <td class="px-4 py-2">{% if group_by == 'category' %}{{ category_badge(row.label) }}{% else %}{{ row.label }}{% endif %}</td>
+        <tr class="border-t border-gray-100 hover:bg-gray-50">
+          <td class="px-4 py-2">
+            {% if group_by == 'category' %}
+              <a href="/transactions?start={{ start }}&end={{ end }}&category={{ row.label | urlencode }}&sort_by=amount&sort_dir=desc"
+                 class="hover:underline">{{ category_badge(row.label) }}</a>
+            {% elif group_by == 'merchant' %}
+              <a href="/transactions?start={{ start }}&end={{ end }}&search={{ row.label | urlencode }}&sort_by=amount&sort_dir=desc"
+                 class="text-indigo-600 hover:underline text-sm">{{ row.label }}</a>
+            {% else %}
+              {{ row.label }}
+            {% endif %}
+          </td>
           <td class="px-4 py-2 text-right font-medium">${{ "%.2f"|format(row.total) }}</td>
           <td class="px-4 py-2 text-right text-gray-500">{{ row.count }}</td>
         </tr>
@@ -107,4 +128,53 @@
 {% else %}
 <p class="text-gray-500 text-sm">No spending data found for the selected period.</p>
 {% endif %}
+
+<script>
+(function () {
+  var startEl = document.getElementById('start');
+  var endEl = document.getElementById('end');
+  var label = document.getElementById('monthLabel');
+
+  function parseMonth(dateStr) {
+    if (!dateStr) return null;
+    var parts = dateStr.split('-');
+    if (parts.length < 2) return null;
+    return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10) };
+  }
+
+  function lastDay(year, month) {
+    return new Date(year, month, 0).getDate();
+  }
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function updateLabel() {
+    var m = parseMonth(startEl.value);
+    if (!m) { label.textContent = ''; return; }
+    var d = new Date(m.year, m.month - 1, 1);
+    label.textContent = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  }
+
+  function navigate(delta) {
+    var m = parseMonth(startEl.value);
+    if (!m) {
+      var now = new Date();
+      m = { year: now.getFullYear(), month: now.getMonth() + 1 };
+    }
+    var newMonth = m.month + delta;
+    var newYear = m.year;
+    if (newMonth > 12) { newMonth = 1; newYear++; }
+    if (newMonth < 1)  { newMonth = 12; newYear--; }
+    var ld = lastDay(newYear, newMonth);
+    startEl.value = newYear + '-' + pad(newMonth) + '-01';
+    endEl.value   = newYear + '-' + pad(newMonth) + '-' + pad(ld);
+    updateLabel();
+    startEl.form.submit();
+  }
+
+  document.getElementById('prevMonth').addEventListener('click', function() { navigate(-1); });
+  document.getElementById('nextMonth').addEventListener('click', function() { navigate(1); });
+  updateLabel();
+})();
+</script>
 {% endblock %}

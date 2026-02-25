@@ -26,6 +26,14 @@
       <option value="account" {% if group_by == 'account' %}selected{% endif %}>Account</option>
     </select>
   </div>
+  <div class="flex items-end">
+    <label class="flex items-center gap-2 text-sm text-gray-600 pb-1.5">
+      <input type="checkbox" name="include_financial" value="1"
+             {% if include_financial == '1' %}checked{% endif %}
+             onchange="this.form.submit()">
+      Include Financial Activity
+    </label>
+  </div>
   <button type="submit"
     class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors">
     Apply

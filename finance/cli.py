@@ -489,7 +489,91 @@ def import_csv_cmd(file: str, institution: str, account_id: str | None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# finance categorize
+# finance pipeline
+# ---------------------------------------------------------------------------
+
+
+@main.command("pipeline")
+@click.option(
+    "--enrich-only",
+    is_flag=True,
+    default=False,
+    help="Skip SimpleFIN sync; only run the AI enrichment pass.",
+)
+def pipeline_cmd(enrich_only: bool) -> None:
+    """Run the AI enrichment pipeline (sync + categorize + enrich in one pass).
+
+    Syncs latest transactions from SimpleFIN (unless --enrich-only), then runs
+    the cluster-first single-pass pipeline to assign categories, canonical merchant
+    names, recurring flags, and review flags to all transactions.
+
+    Use 'finance categorize' or 'finance sync' for the older two-pass approach
+    (deprecated).
+    """
+    import os
+
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        click.echo(
+            "Error: ANTHROPIC_API_KEY is not set.\n"
+            "Add ANTHROPIC_API_KEY=<your-key> to your .env file or environment.",
+            err=True,
+        )
+        sys.exit(1)
+
+    from finance.ai.pipeline import run_pipeline
+
+    conn = _open_db()
+    start_ms = int(time.time() * 1000)
+
+    def cli_emit(event: dict) -> None:
+        etype = event.get("type")
+        step = event.get("step")
+        data = event.get("data", {})
+
+        if etype == "step_start":
+            if step == "sync":
+                click.echo("[sync] starting...")
+            elif step == "cluster-build":
+                click.echo("[cluster-build] building clusters...")
+            elif step == "enrich-batch":
+                bi = data.get("batch_index", "?")
+                bt = data.get("batch_total", "?")
+                click.echo(f"[enrich-batch {bi}/{bt}] sending to AI...")
+        elif etype == "step_done":
+            if step == "sync":
+                n = data.get("new_transactions", 0)
+                click.echo(f"[sync] done — {n} new transactions")
+            elif step == "cluster-build":
+                cc = data.get("cluster_count", "?")
+                tc = data.get("transaction_count", "?")
+                click.echo(f"[cluster-build] done — {cc} clusters, {tc} transactions")
+            elif step == "enrich-batch":
+                bi = data.get("batch_index", "?")
+                bt = data.get("batch_total", "?")
+                ti = data.get("tokens_in", "?")
+                to = data.get("tokens_out", "?")
+                click.echo(f"[enrich-batch {bi}/{bt}] done — {ti} tokens in / {to} tokens out")
+        elif etype == "error":
+            msg = data.get("message", "Unknown error")
+            if step:
+                click.echo(f"[{step}] error: {msg}", err=True)
+            else:
+                click.echo(f"[pipeline] error: {msg}", err=True)
+        elif etype == "run_done":
+            txn = data.get("transactions_updated", 0)
+            dur_ms = data.get("duration_ms", 0)
+            dur_s = dur_ms / 1000.0
+            click.echo(f"\nPipeline complete — {txn} transaction(s) updated in {dur_s:.1f}s")
+
+    try:
+        total = run_pipeline(conn, emit=cli_emit, run_sync=not enrich_only)
+    except Exception as exc:
+        click.echo(f"Pipeline failed: {exc}", err=True)
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# finance categorize (deprecated — use 'finance pipeline')
 # ---------------------------------------------------------------------------
 
 
@@ -497,6 +581,9 @@ def import_csv_cmd(file: str, institution: str, account_id: str | None) -> None:
 @click.option("--all", "recategorize_all", is_flag=True, help="Re-categorize all transactions, not just uncategorized ones.")
 def categorize(recategorize_all: bool) -> None:
     """Categorize transactions using AI.
+
+    DEPRECATED: Use 'finance pipeline' instead, which runs a faster single-pass
+    cluster-first pipeline that combines categorization and enrichment.
 
     By default, only processes transactions where category is not yet set.
     Use --all to re-categorize every transaction (e.g. after taxonomy changes).

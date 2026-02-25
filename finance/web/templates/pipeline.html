@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Pipeline — Finance{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Pipeline</h1>
+
+<!-- Run Pipeline button and streaming panel -->
+<section class="mb-8">
+  <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+    <h2 class="text-lg font-semibold mb-3 text-gray-700">Run Pipeline</h2>
+    <p class="text-sm text-gray-500 mb-4">
+      Runs a full sync + AI enrichment pass. Assigns categories, canonical merchant names,
+      recurring flags, and review flags to all transactions.
+    </p>
+    <button
+      id="run-btn"
+      class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-medium px-5 py-2 rounded-md transition-colors"
+      onclick="startPipeline()"
+    >
+      Run Pipeline
+    </button>
+  </div>
+
+  <!-- Streaming progress panel (hidden by default) -->
+  <div id="stream-panel" class="hidden mt-4 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+    <div class="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+      <span class="text-sm font-semibold text-gray-700">Pipeline Progress</span>
+      <span id="panel-status" class="text-xs text-gray-500">Running...</span>
+    </div>
+    <div id="step-list" class="divide-y divide-gray-100 font-mono text-xs"></div>
+    <div id="summary-banner" class="hidden px-4 py-3 bg-green-50 border-t border-green-200 text-sm text-green-800 font-medium"></div>
+    <div id="error-banner" class="hidden px-4 py-3 bg-red-50 border-t border-red-200 text-sm text-red-800 font-medium"></div>
+  </div>
+</section>
+
+<!-- Run history table -->
+<section class="mb-8">
+  <h2 class="text-lg font-semibold mb-3 text-gray-700">Run History</h2>
+  <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+    {% if runs %}
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+        <tr>
+          <th class="px-4 py-2 text-left">ID</th>
+          <th class="px-4 py-2 text-left">Type</th>
+          <th class="px-4 py-2 text-left">Started</th>
+          <th class="px-4 py-2 text-left">Duration</th>
+          <th class="px-4 py-2 text-left">Status</th>
+          <th class="px-4 py-2 text-left">Error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr class="border-t border-gray-100">
+          <td class="px-4 py-2 text-gray-500">{{ run.id }}</td>
+          <td class="px-4 py-2">{{ run.run_type }}</td>
+          <td class="px-4 py-2 text-gray-600">
+            {% if run.started_at %}
+              {{ (run.started_at / 1000) | int | string }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-gray-600">
+            {% if run.finished_at and run.started_at %}
+              {{ "%.1f"|format((run.finished_at - run.started_at) / 1000) }}s
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td class="px-4 py-2">
+            {% if run.status == 'success' %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">success</span>
+            {% elif run.status == 'error' %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">error</span>
+            {% elif run.status == 'running' %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">running</span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">{{ run.status }}</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-red-600 text-xs">{{ run.error_msg or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="px-4 py-6 text-gray-500 text-sm">No runs yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+<script>
+  var stepRows = {};
+
+  function formatTs(ts) {
+    return new Date(ts).toLocaleTimeString();
+  }
+
+  function formatStepName(step, data) {
+    if (!step) return 'Pipeline';
+    if (step === 'enrich-batch') {
+      var bi = data && data.batch_index ? data.batch_index : '?';
+      var bt = data && data.batch_total ? data.batch_total : '?';
+      return 'Enrich batch ' + bi + '/' + bt;
+    }
+    if (step === 'sync') return 'Sync';
+    if (step === 'cluster-build') return 'Cluster build';
+    if (step === 'write-results') return 'Write results';
+    return step;
+  }
+
+  function getStepKey(evt) {
+    if (evt.step === 'enrich-batch') {
+      return 'enrich-batch-' + (evt.data && evt.data.batch_index ? evt.data.batch_index : '0');
+    }
+    return evt.step || 'run';
+  }
+
+  function appendStep(key, html) {
+    var list = document.getElementById('step-list');
+    var div = document.createElement('div');
+    div.id = 'step-row-' + key;
+    div.className = 'px-4 py-2 flex items-center gap-3';
+    div.innerHTML = html;
+    list.appendChild(div);
+    stepRows[key] = div;
+  }
+
+  function updateStep(key, html) {
+    var row = document.getElementById('step-row-' + key);
+    if (row) {
+      row.innerHTML = html;
+    } else {
+      appendStep(key, html);
+    }
+  }
+
+  function spinnerIcon() {
+    return '<span class="text-yellow-500 font-bold">&#8635;</span>';
+  }
+
+  function checkIcon() {
+    return '<span class="text-green-600 font-bold">&#10003;</span>';
+  }
+
+  function errorIcon() {
+    return '<span class="text-red-600 font-bold">&#10007;</span>';
+  }
+
+  function startPipeline() {
+    var btn = document.getElementById('run-btn');
+    btn.disabled = true;
+
+    var panel = document.getElementById('stream-panel');
+    panel.classList.remove('hidden');
+
+    document.getElementById('step-list').innerHTML = '';
+    document.getElementById('summary-banner').classList.add('hidden');
+    document.getElementById('error-banner').classList.add('hidden');
+    document.getElementById('panel-status').textContent = 'Running...';
+
+    stepRows = {};
+    var stepStartTimes = {};
+
+    var es = new EventSource('/pipeline/run/stream');
+
+    es.onmessage = function(e) {
+      var evt;
+      try {
+        evt = JSON.parse(e.data);
+      } catch (err) {
+        return;
+      }
+
+      var key = getStepKey(evt);
+      var name = formatStepName(evt.step, evt.data);
+      var ts = evt.ts;
+
+      if (evt.type === 'step_start') {
+        stepStartTimes[key] = ts;
+        appendStep(key,
+          spinnerIcon() +
+          '<span class="text-gray-700 flex-1">' + name + '</span>' +
+          '<span class="text-gray-400 text-xs">' + formatTs(ts) + '</span>'
+        );
+      } else if (evt.type === 'step_done') {
+        var elapsed = stepStartTimes[key] ? (ts - stepStartTimes[key]) : 0;
+        var extra = '';
+        if (evt.data && evt.data.tokens_in != null) {
+          extra = ' &mdash; ' + evt.data.tokens_in + ' in / ' + evt.data.tokens_out + ' out tokens';
+        }
+        if (evt.data && evt.data.new_transactions != null) {
+          extra = ' &mdash; ' + evt.data.new_transactions + ' new transactions';
+        }
+        if (evt.data && evt.data.cluster_count != null && evt.step === 'cluster-build') {
+          extra = ' &mdash; ' + evt.data.cluster_count + ' clusters, ' + evt.data.transaction_count + ' transactions';
+        }
+        updateStep(key,
+          checkIcon() +
+          '<span class="text-gray-700 flex-1">' + name + extra + '</span>' +
+          '<span class="text-gray-400 text-xs">' + elapsed + 'ms</span>'
+        );
+      } else if (evt.type === 'error') {
+        var errMsg = evt.data && evt.data.message ? evt.data.message : 'Unknown error';
+        var isStep = evt.step && evt.step !== null;
+
+        if (isStep) {
+          // Per-step error — show in row, continue
+          updateStep(key,
+            errorIcon() +
+            '<span class="text-red-700 flex-1">' + name + ' &mdash; ' + errMsg + '</span>'
+          );
+        } else {
+          // Catastrophic error
+          var errBanner = document.getElementById('error-banner');
+          errBanner.textContent = 'Pipeline failed: ' + errMsg;
+          errBanner.classList.remove('hidden');
+          document.getElementById('panel-status').textContent = 'Failed';
+          btn.disabled = false;
+          es.close();
+        }
+      } else if (evt.type === 'run_done') {
+        var d = evt.data || {};
+        var durSec = d.duration_ms ? (d.duration_ms / 1000).toFixed(1) : '?';
+        var txn = d.transactions_updated != null ? d.transactions_updated : '?';
+
+        var summaryBanner = document.getElementById('summary-banner');
+        summaryBanner.textContent = 'Pipeline complete — ' + txn + ' transactions updated in ' + durSec + 's (run #' + (d.run_id || '?') + ')';
+        summaryBanner.classList.remove('hidden');
+        document.getElementById('panel-status').textContent = 'Done';
+        btn.disabled = false;
+        es.close();
+
+        // Reload to refresh run history table
+        setTimeout(function() { location.reload(); }, 1500);
+      }
+    };
+
+    es.onerror = function(e) {
+      var errBanner = document.getElementById('error-banner');
+      errBanner.textContent = 'Connection error. The pipeline may still be running.';
+      errBanner.classList.remove('hidden');
+      document.getElementById('panel-status').textContent = 'Connection lost';
+      btn.disabled = false;
+      es.close();
+    };
+  }
+</script>
+{% endblock %}

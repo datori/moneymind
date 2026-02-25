@@ -58,6 +58,30 @@ CREATE TABLE IF NOT EXISTS credit_limits (
     credit_limit REAL NOT NULL,
     updated_at   INTEGER NOT NULL  -- unix ms
 );
+
+CREATE TABLE IF NOT EXISTS run_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_type    TEXT NOT NULL,
+    started_at  INTEGER NOT NULL,
+    finished_at INTEGER,
+    status      TEXT NOT NULL DEFAULT 'running',
+    error_msg   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS run_steps (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id           INTEGER NOT NULL REFERENCES run_log(id),
+    step_type        TEXT NOT NULL,
+    batch_index      INTEGER,
+    batch_total      INTEGER,
+    started_at       INTEGER NOT NULL,
+    finished_at      INTEGER,
+    request_summary  TEXT,
+    response_summary TEXT,
+    tokens_in        INTEGER,
+    tokens_out       INTEGER,
+    error_msg        TEXT
+);
 """
 
 

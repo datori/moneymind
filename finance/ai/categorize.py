@@ -7,6 +7,7 @@ import logging
 import os
 import sqlite3
 import time
+import warnings
 
 import anthropic
 from dotenv import load_dotenv
@@ -152,12 +153,20 @@ def categorize_uncategorized(conn: sqlite3.Connection) -> int:
 
     Processes in batches of 50. Logs and skips any batch that fails.
 
+    .. deprecated::
+        Use run_pipeline() from finance.ai.pipeline instead.
+
     Args:
         conn: Open SQLite connection.
 
     Returns:
         Total number of transactions updated.
     """
+    warnings.warn(
+        "categorize_uncategorized() is deprecated; use run_pipeline() from finance.ai.pipeline instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return _categorize(conn, "WHERE categorized_at IS NULL")
 
 
@@ -166,10 +175,18 @@ def categorize_all(conn: sqlite3.Connection) -> int:
 
     Processes in batches of 50. Logs and skips any batch that fails.
 
+    .. deprecated::
+        Use run_pipeline() from finance.ai.pipeline instead.
+
     Args:
         conn: Open SQLite connection.
 
     Returns:
         Total number of transactions updated.
     """
+    warnings.warn(
+        "categorize_all() is deprecated; use run_pipeline() from finance.ai.pipeline instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return _categorize(conn, "")

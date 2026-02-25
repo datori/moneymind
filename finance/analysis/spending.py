@@ -82,6 +82,7 @@ def get_spending_summary(
     start_date: str,
     end_date: str,
     group_by: str = "category",
+    exclude_categories: list[str] | None = None,
 ) -> list[dict]:
     """Return aggregate spending (debit transactions only) for the given period.
 
@@ -94,6 +95,9 @@ def get_spending_summary(
         end_date: Inclusive end date (YYYY-MM-DD).
         group_by: Dimension to group by: "category", "merchant", or "account".
                   Default "category".
+        exclude_categories: Optional list of category names to exclude from
+                            results. When None (default), all categories are
+                            included (backward-compatible behavior).
 
     Returns:
         List of dicts with keys: label, total, count.
@@ -123,9 +127,18 @@ def get_spending_summary(
         WHERE t.amount < 0
           AND t.date >= ?
           AND t.date <= ?
+    """
+    params: list = [start_date, end_date]
+
+    if exclude_categories:
+        placeholders = ", ".join("?" * len(exclude_categories))
+        sql += f" AND t.category NOT IN ({placeholders})"
+        params.extend(exclude_categories)
+
+    sql += f"""
         GROUP BY {label_expr}
         ORDER BY total DESC
     """
 
-    rows = conn.execute(sql, [start_date, end_date]).fetchall()
+    rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]

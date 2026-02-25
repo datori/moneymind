@@ -11,15 +11,17 @@ from pathlib import Path
 from typing import Generator
 
 import uvicorn
-from fastapi import Depends, FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
+from finance.ai.categories import CATEGORIES
 from finance.analysis.accounts import get_accounts, get_credit_utilization
 from finance.analysis.overview import get_data_overview
 from finance.analysis.net_worth import get_balance_history, get_net_worth
 from finance.analysis.review import get_recurring, get_review_queue
 from finance.analysis.spending import get_spending_summary, get_transactions
+from finance.ai.pipeline import run_pipeline
 from finance.ingestion.sync import sync_all
 
 # ---------------------------------------------------------------------------
@@ -85,8 +87,22 @@ async def index(
     """Dashboard home: net worth summary, monthly spending, credit utilization."""
     net_worth = get_net_worth(conn)
     start, end = _current_month_range()
-    spending = get_spending_summary(conn, start_date=start, end_date=end)
+    spending = get_spending_summary(
+        conn,
+        start_date=start,
+        end_date=end,
+        exclude_categories=["Financial", "Income", "Investment"],
+    )
     utilization = get_credit_utilization(conn)
+
+    # Recent pipeline runs (gracefully handles missing table on first boot)
+    try:
+        recent_runs = conn.execute(
+            "SELECT * FROM run_log ORDER BY started_at DESC LIMIT 5"
+        ).fetchall()
+        recent_runs = [dict(r) for r in recent_runs]
+    except sqlite3.OperationalError:
+        recent_runs = []
 
     return templates.TemplateResponse(
         "index.html",
@@ -97,6 +113,7 @@ async def index(
             "spending_start": start,
             "spending_end": end,
             "utilization": utilization,
+            "recent_runs": recent_runs,
             "msg": msg,
             "error": error,
         },
@@ -106,28 +123,86 @@ async def index(
 @app.get("/accounts", response_class=HTMLResponse)
 async def accounts_page(
     request: Request,
+    msg: str | None = None,
     conn: sqlite3.Connection = Depends(get_db),
 ):
-    """Account list with current balances and data coverage."""
+    """Unified account list: balances, data coverage, and delete actions."""
     accounts = get_accounts(conn)
     overview = get_data_overview(conn)
+
+    # Build per-account balance count lookup
+    balance_rows = conn.execute(
+        "SELECT account_id, COUNT(*) as cnt FROM balances GROUP BY account_id"
+    ).fetchall()
+    balance_counts = {r["account_id"]: r["cnt"] for r in balance_rows}
+
+    # Build overview lookup by account_id
+    ov_lookup = {ov["account_id"]: ov for ov in overview["per_account"]}
+
+    # Merge all three sources into a single list
+    merged_accounts = []
+    for acct in accounts:
+        ov = ov_lookup.get(acct["id"], {})
+        merged_accounts.append({
+            **dict(acct),
+            "txn_count": ov.get("txn_count", 0),
+            "earliest_txn": ov.get("earliest_txn"),
+            "latest_txn": ov.get("latest_txn"),
+            "last_synced_at": ov.get("last_synced_at"),
+            "balance_count": balance_counts.get(acct["id"], 0),
+        })
+
     return templates.TemplateResponse(
         "accounts.html",
-        {"request": request, "accounts": accounts, "overview": overview},
+        {
+            "request": request,
+            "accounts": merged_accounts,
+            "overview": overview,
+            "msg": msg,
+        },
     )
 
 
-@app.get("/data", response_class=HTMLResponse)
-async def data_page(
+@app.post("/accounts/{account_id}/delete")
+async def delete_account(
+    account_id: str,
     request: Request,
     conn: sqlite3.Connection = Depends(get_db),
 ):
-    """Data coverage overview: transaction counts, date ranges, last sync per account."""
-    overview = get_data_overview(conn)
-    return templates.TemplateResponse(
-        "data.html",
-        {"request": request, "overview": overview},
+    """Delete an account and all its dependent rows; redirect to /accounts."""
+    # Look up the account — 404 if not found
+    row = conn.execute("SELECT name FROM accounts WHERE id = ?", (account_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    account_name = row["name"]
+
+    # Capture counts before deletion for the flash message
+    txn_count = conn.execute(
+        "SELECT COUNT(*) FROM transactions WHERE account_id = ?", (account_id,)
+    ).fetchone()[0]
+    bal_count = conn.execute(
+        "SELECT COUNT(*) FROM balances WHERE account_id = ?", (account_id,)
+    ).fetchone()[0]
+
+    # Cascade delete in a single transaction
+    conn.execute("BEGIN")
+    conn.execute("DELETE FROM credit_limits WHERE account_id = ?", (account_id,))
+    conn.execute("DELETE FROM sync_state WHERE account_id = ?", (account_id,))
+    conn.execute("DELETE FROM transactions WHERE account_id = ?", (account_id,))
+    conn.execute("DELETE FROM balances WHERE account_id = ?", (account_id,))
+    conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+    conn.commit()
+
+    msg = (
+        f"Deleted '{account_name}' ({txn_count} transactions, {bal_count} balances removed)."
     )
+    return RedirectResponse(f"/accounts?msg={msg}", status_code=303)
+
+
+@app.get("/data")
+async def data_page():
+    """Redirect to the unified accounts page (301 permanent)."""
+    return RedirectResponse("/accounts", status_code=301)
 
 
 @app.get("/transactions", response_class=HTMLResponse)
@@ -136,14 +211,16 @@ async def transactions_page(
     start: str | None = None,
     end: str | None = None,
     limit: int = 100,
+    category: str | None = None,
     conn: sqlite3.Connection = Depends(get_db),
 ):
-    """Transaction browser with date range filter."""
+    """Transaction browser with date range and category filters."""
     txns = get_transactions(
         conn,
         start_date=start,
         end_date=end,
         limit=limit,
+        category=category,
     )
     return templates.TemplateResponse(
         "transactions.html",
@@ -153,6 +230,8 @@ async def transactions_page(
             "start": start or "",
             "end": end or "",
             "limit": limit,
+            "categories": CATEGORIES,
+            "category": category or "",
         },
     )
 
@@ -200,14 +279,23 @@ async def spending_page(
     start: str | None = None,
     end: str | None = None,
     group_by: str = "category",
+    include_financial: str = "0",
     conn: sqlite3.Connection = Depends(get_db),
 ):
-    """Spending breakdown chart with period selector."""
+    """Spending breakdown chart with period selector and financial toggle."""
     if not start or not end:
         start, end = _current_month_range()
 
+    exclude_cats = None if include_financial == "1" else ["Financial", "Income", "Investment"]
+
     try:
-        spending = get_spending_summary(conn, start_date=start, end_date=end, group_by=group_by)
+        spending = get_spending_summary(
+            conn,
+            start_date=start,
+            end_date=end,
+            group_by=group_by,
+            exclude_categories=exclude_cats,
+        )
     except ValueError:
         spending = []
         group_by = "category"
@@ -224,6 +312,7 @@ async def spending_page(
             "start": start,
             "end": end,
             "group_by": group_by,
+            "include_financial": include_financial,
             "chart_data_json": chart_data_json,
         },
     )
@@ -235,8 +324,6 @@ async def review_page(
     conn: sqlite3.Connection = Depends(get_db),
 ):
     """Review queue: transactions flagged for human review."""
-    from finance.ai.categories import CATEGORIES
-
     transactions = get_review_queue(conn)
     return templates.TemplateResponse(
         "review.html",
@@ -310,6 +397,85 @@ async def sync_now(
         redirect_url = f"{safe_referer}{sep}error={error}"
 
     return RedirectResponse(url=redirect_url, status_code=303)
+
+
+@app.get("/pipeline", response_class=HTMLResponse)
+async def pipeline_page(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Pipeline run history page with 'Run Pipeline' button."""
+    try:
+        runs = conn.execute(
+            "SELECT * FROM run_log ORDER BY started_at DESC LIMIT 20"
+        ).fetchall()
+        runs = [dict(r) for r in runs]
+    except sqlite3.OperationalError:
+        runs = []
+
+    return templates.TemplateResponse(
+        "pipeline.html",
+        {"request": request, "runs": runs},
+    )
+
+
+@app.get("/pipeline/run/stream")
+def pipeline_run_stream(request: Request):
+    """Trigger pipeline and stream SSE progress events to the client.
+
+    Opens its own DB connection (not via Depends) because StreamingResponse
+    generators exhaust before the dependency finally-block runs. Uses a
+    background thread + queue so the generator can yield events as they are
+    emitted by run_pipeline rather than buffering them all.
+    """
+    import queue
+    import threading
+
+    from finance.db import DATABASE_PATH, init_db
+
+    def event_generator():
+        db_path = Path(DATABASE_PATH)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        init_db(conn)
+
+        try:
+            event_queue: queue.Queue = queue.Queue()
+            DONE_SENTINEL = object()
+
+            def pipeline_thread():
+                try:
+                    def thread_emit(event: dict) -> None:
+                        event_queue.put(event)
+
+                    run_pipeline(conn, emit=thread_emit, run_sync=True)
+                except Exception:
+                    pass
+                finally:
+                    event_queue.put(DONE_SENTINEL)
+
+            t = threading.Thread(target=pipeline_thread, daemon=True)
+            t.start()
+
+            while True:
+                event = event_queue.get()
+                if event is DONE_SENTINEL:
+                    break
+                yield f"data: {json.dumps(event)}\n\n"
+
+        finally:
+            conn.close()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

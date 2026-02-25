@@ -4,6 +4,8 @@ Pass 1 (categorization) lives in finance/ai/categorize.py — unchanged.
 Pass 2 (this module) builds merchant clusters from all transactions, sends them
 to claude-haiku in batches, and writes back canonical merchant names, recurring
 flags, and review flags to the transactions table.
+
+DEPRECATED: Use run_pipeline() from finance.ai.pipeline instead.
 """
 
 from __future__ import annotations
@@ -11,12 +13,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import sqlite3
+import warnings
 from statistics import median
 
 import anthropic
 from dotenv import load_dotenv
+
+# Import shared helpers from pipeline.py (these were moved there)
+from finance.ai.pipeline import _normalize_merchant_key, _build_clusters, _strip_fences
 
 load_dotenv()
 
@@ -27,117 +32,6 @@ _MAX_TOKENS = 4096
 _CLUSTER_BATCH_SIZE = 40
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# 2.1  Merchant normalization
-# ---------------------------------------------------------------------------
-
-
-def _normalize_merchant_key(
-    merchant_name: str | None, description: str | None
-) -> str:
-    """Return a normalized, lowercase merchant key for clustering.
-
-    Applies, in order:
-    1. Use ``merchant_name`` if non-empty, otherwise fall back to ``description``.
-    2. Lowercase.
-    3. Strip ``*SUFFIX`` patterns (e.g. ``NETFLIX*AB1234`` → ``netflix``).
-    4. Strip common TLDs: ``.com``, ``.net``, ``.org``.
-    5. Collapse whitespace and strip leading/trailing punctuation.
-    """
-    raw: str = (merchant_name or description or "").strip()
-    if not raw:
-        return "unknown"
-
-    # Lowercase
-    key = raw.lower()
-
-    # Strip *ANYTHING (trailing asterisk with optional suffix)
-    key = re.sub(r"\*.*", "", key)
-
-    # Strip .com / .net / .org (with optional trailing content)
-    key = re.sub(r"\.(com|net|org)\b.*", "", key)
-
-    # Collapse any remaining whitespace
-    key = " ".join(key.split())
-
-    # Strip leading/trailing punctuation
-    key = key.strip(".-_/#&")
-
-    return key or "unknown"
-
-
-# ---------------------------------------------------------------------------
-# 3.1 / 3.2  Cluster builder
-# ---------------------------------------------------------------------------
-
-
-def _build_clusters(conn: sqlite3.Connection) -> list[dict]:
-    """Group all transactions by normalized merchant key.
-
-    Returns a list of cluster dicts::
-
-        {
-            "merchant_key": str,
-            "raw_samples": list[str],   # up to 5 distinct descriptions seen
-            "transaction_ids": list[str],
-            "amounts": list[float],
-        }
-
-    Clusters with only a single transaction are included — single-occurrence
-    merchants can still be recurring (first sync) or deserve review.
-    """
-    rows = conn.execute(
-        "SELECT id, merchant_name, description, amount FROM transactions"
-    ).fetchall()
-
-    clusters: dict[str, dict] = {}
-    for row in rows:
-        key = _normalize_merchant_key(row["merchant_name"], row["description"])
-        if key not in clusters:
-            clusters[key] = {
-                "merchant_key": key,
-                "raw_samples": [],
-                "_raw_set": set(),
-                "transaction_ids": [],
-                "amounts": [],
-            }
-        c = clusters[key]
-        raw = (row["merchant_name"] or row["description"] or "").strip()
-        if raw and raw not in c["_raw_set"] and len(c["raw_samples"]) < 5:
-            c["raw_samples"].append(raw)
-            c["_raw_set"].add(raw)
-        c["transaction_ids"].append(row["id"])
-        c["amounts"].append(row["amount"])
-
-    # Drop the internal dedup set before returning
-    result = []
-    for c in clusters.values():
-        del c["_raw_set"]
-        result.append(c)
-
-    return result
-
-
-# ---------------------------------------------------------------------------
-# 4.1 / 4.2 / 4.3  LLM enrichment batch
-# ---------------------------------------------------------------------------
-
-
-def _strip_fences(text: str) -> str:
-    """Strip markdown code fences from model output (mirrors categorize.py)."""
-    if text.startswith("```"):
-        lines = text.splitlines()
-        inner = []
-        in_fence = False
-        for line in lines:
-            if line.startswith("```"):
-                in_fence = not in_fence
-                continue
-            inner.append(line)
-        return "\n".join(inner).strip()
-    return text
 
 
 def _enrich_batch(clusters: list[dict]) -> list[dict]:
@@ -275,9 +169,17 @@ def enrich_transactions(conn: sqlite3.Connection) -> int:
     from the model).  Failing batches are logged and skipped; the pipeline is
     non-fatal.
 
+    .. deprecated::
+        Use run_pipeline() from finance.ai.pipeline instead.
+
     Returns:
         Total number of transaction rows updated across all batches.
     """
+    warnings.warn(
+        "enrich_transactions() is deprecated; use run_pipeline() from finance.ai.pipeline instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     clusters = _build_clusters(conn)
     if not clusters:
         logger.info("enrich_transactions: no transactions found, nothing to do")

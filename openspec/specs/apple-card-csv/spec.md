@@ -3,21 +3,21 @@
 ### Requirement: Apple Card CSV normalizer
 The system SHALL support Apple Card CSV exports via institution key `"apple"` registered in the `NORMALIZERS` dict in `finance/ingestion/csv_import.py`.
 
-Apple Card CSV columns: `Transaction Date`, `Clearing Date`, `Description`, `Merchant`, `Category`, `Type`, `Amount (USD)`.
+Apple Card CSV columns: `Transaction Date`, `Clearing Date`, `Description`, `Merchant`, `Category`, `Type`, `Amount (USD)`, `Purchased By` (ignored).
 
 Column mapping rules:
 - `date` ← `Transaction Date` (parsed via `_parse_date`)
 - `merchant_name` ← `Merchant`
 - `description` ← `Description`
 - `amount` ← `-(float("Amount (USD)"))` (Apple: positive = charge; canonical: negative = debit)
-- Rows where `Type == "Payments"` SHALL be skipped (return `None`)
+- Rows where `Type == "Payment"` SHALL be skipped (return `None`)
 
 #### Scenario: Normal purchase row is imported
-- **WHEN** an Apple Card CSV row has `Type` of `"Purchase"` (or any value other than `"Payments"`)
+- **WHEN** an Apple Card CSV row has `Type` of `"Purchase"` (or any value other than `"Payment"`)
 - **THEN** a `Transaction` is returned with `amount` equal to the negated value of `Amount (USD)`, `merchant_name` from `Merchant`, and `description` from `Description`
 
 #### Scenario: Payment row is skipped
-- **WHEN** an Apple Card CSV row has `Type == "Payments"`
+- **WHEN** an Apple Card CSV row has `Type == "Payment"`
 - **THEN** `normalize_apple` returns `None` and no transaction is inserted for that row
 
 #### Scenario: Amount sign is negated

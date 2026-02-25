@@ -238,9 +238,8 @@ def normalize_amex(row: dict, account_id: str) -> Transaction | None:
     """Normalize an American Express credit card CSV row.
 
     Expected columns: ``Date``, ``Amount``, ``Description``.
-    Amex may export amounts with reversed sign depending on the export type;
-    best-effort assumes the exported sign matches canonical convention
-    (negative = debit). Adjust if real export differs.
+    Amex exports positive amounts for charges and negative for payments/credits.
+    The normalizer negates to match the canonical convention (negative = debit).
 
     Args:
         row:        A single CSV row dict from ``csv.DictReader``.
@@ -258,7 +257,7 @@ def normalize_amex(row: dict, account_id: str) -> Transaction | None:
 
     date = _parse_date(date_raw)
     try:
-        amount = float(amount_raw.replace(",", ""))
+        amount = -float(amount_raw.replace(",", ""))
     except ValueError:
         return None
 
@@ -361,6 +360,56 @@ def normalize_apple(row: dict, account_id: str) -> Transaction | None:
     )
 
 
+def normalize_capital_one(row: dict, account_id: str) -> Transaction | None:
+    """Normalize a Capital One credit card CSV row.
+
+    Expected columns: ``Transaction Date``, ``Posted Date``, ``Card No.``,
+    ``Description``, ``Category``, ``Debit``, ``Credit``.
+    Capital One uses separate Debit and Credit columns; merged into signed amount:
+    ``amount = -abs(debit)`` if Debit is non-empty, else ``+abs(credit)``.
+    Dates are in ``YYYY-MM-DD`` format.
+
+    Args:
+        row:        A single CSV row dict from ``csv.DictReader``.
+        account_id: Account primary key.
+
+    Returns:
+        A :class:`Transaction` or ``None`` to skip the row.
+    """
+    date_raw = (row.get("Transaction Date") or "").strip()
+    debit_raw = (row.get("Debit") or "").strip()
+    credit_raw = (row.get("Credit") or "").strip()
+    description = (row.get("Description") or "").strip() or None
+
+    if not date_raw:
+        return None
+    if not debit_raw and not credit_raw:
+        return None
+
+    date = _parse_date(date_raw)
+
+    amount_raw = debit_raw if debit_raw else credit_raw
+    try:
+        raw_value = float(amount_raw.replace(",", ""))
+    except ValueError:
+        return None
+
+    if debit_raw:
+        amount = -abs(raw_value)
+    else:
+        amount = abs(raw_value)
+
+    txn_id = generate_csv_id(account_id, date_raw, amount_raw, description or "")
+    return Transaction(
+        id=txn_id,
+        account_id=account_id,
+        date=date,
+        amount=amount,
+        description=description,
+        raw=json.dumps(dict(row)),
+    )
+
+
 def normalize_m1(row: dict, account_id: str) -> Transaction | None:
     """Normalize an M1 Finance CSV row (best-effort).
 
@@ -417,6 +466,7 @@ NORMALIZERS: dict[str, Callable[[dict, str], Transaction | None]] = {
     "discover": normalize_discover,
     "discover-debit": normalize_discover_debit,
     "citi": normalize_citi,
+    "capital-one": normalize_capital_one,
     "amex": normalize_amex,
     "robinhood": normalize_robinhood,
     "m1": normalize_m1,
@@ -530,6 +580,7 @@ def import_csv(
     filepath: str,
     institution: str,
     account_id: str | None,
+    before_date: str | None = None,
 ) -> dict:
     """Import transactions from a CSV file into the database.
 
@@ -544,9 +595,14 @@ def import_csv(
                      :data:`NORMALIZERS`.
         account_id:  Account primary key to associate rows with.  If ``None``,
                      the user is prompted and a new account is created.
+        before_date: Optional ISO date string (``YYYY-MM-DD``).  Rows with a
+                     transaction date on or after this date are skipped.  Used
+                     for historical backfill to avoid duplicating transactions
+                     already present via SimpleFIN.
 
     Returns:
-        A dict with keys ``rows_read``, ``rows_imported``, ``rows_skipped``.
+        A dict with keys ``rows_read``, ``rows_imported``, ``rows_skipped``,
+        ``rows_cutoff``.
 
     Raises:
         ValueError: If *institution* is not supported or *account_id* is
@@ -563,6 +619,7 @@ def import_csv(
     rows_read = 0
     rows_imported = 0
     rows_skipped = 0
+    rows_cutoff = 0
 
     with open(filepath, newline="", encoding="utf-8-sig") as fh:
         reader = csv.DictReader(fh)
@@ -576,6 +633,10 @@ def import_csv(
 
             if txn is None:
                 rows_skipped += 1
+                continue
+
+            if before_date is not None and txn.date >= before_date:
+                rows_cutoff += 1
                 continue
 
             cursor = conn.execute(
@@ -618,6 +679,7 @@ def import_csv(
         "rows_read": rows_read,
         "rows_imported": rows_imported,
         "rows_skipped": rows_skipped,
+        "rows_cutoff": rows_cutoff,
     }
 
 

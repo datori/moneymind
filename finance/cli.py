@@ -461,19 +461,60 @@ def set_limit(account_id: str, amount: float) -> None:
     default=None,
     help="Existing account ID to associate transactions with. Omit to auto-create.",
 )
-def import_csv_cmd(file: str, institution: str, account_id: str | None) -> None:
+@click.option(
+    "--before",
+    "before_date",
+    default=None,
+    help=(
+        "Only import rows with a transaction date strictly before DATE (YYYY-MM-DD). "
+        "If omitted, auto-detected from the earliest SimpleFIN transaction for the account."
+    ),
+)
+def import_csv_cmd(
+    file: str,
+    institution: str,
+    account_id: str | None,
+    before_date: str | None,
+) -> None:
     """Import transactions from a CSV file exported by a financial institution.
 
     \b
     FILE          Path to the CSV file to import.
     --institution Institution key (required). Run `finance institutions` to list supported names.
     --account     Existing account ID. If omitted, a new account is created interactively.
+    --before      Cut-off date (YYYY-MM-DD) for historical backfill. Rows on or after this
+                  date are skipped to avoid duplicating transactions already in SimpleFIN.
+                  Auto-detected from earliest SimpleFIN data when omitted.
     """
+    import re
     from finance.ingestion.csv_import import import_csv
 
+    # Validate --before format before opening the DB
+    if before_date is not None:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", before_date):
+            click.echo(
+                f"Error: --before '{before_date}' is not a valid date. "
+                "Expected format: YYYY-MM-DD (e.g. 2024-11-01).",
+                err=True,
+            )
+            sys.exit(1)
+
     conn = _open_db()
+
+    # Auto-detect cutoff from earliest SimpleFIN transaction when --before is omitted
+    if before_date is None and account_id is not None:
+        row = conn.execute(
+            "SELECT MIN(date) AS earliest FROM transactions WHERE account_id = ? AND source = 'simplefin'",
+            (account_id,),
+        ).fetchone()
+        if row and row["earliest"]:
+            before_date = row["earliest"]
+            click.echo(
+                f"Auto-detected cutoff: {before_date} (earliest SimpleFIN transaction for this account)"
+            )
+
     try:
-        result = import_csv(conn, file, institution, account_id)
+        result = import_csv(conn, file, institution, account_id, before_date=before_date)
     except ValueError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
@@ -481,10 +522,12 @@ def import_csv_cmd(file: str, institution: str, account_id: str | None) -> None:
         click.echo(f"Import failed: {exc}", err=True)
         sys.exit(1)
 
+    cutoff_note = f", {result['rows_cutoff']} after cutoff" if result["rows_cutoff"] else ""
     click.echo(
         f"Import complete — {result['rows_read']} row(s) read, "
         f"{result['rows_imported']} imported, "
-        f"{result['rows_skipped']} skipped (duplicates or blank)."
+        f"{result['rows_skipped']} skipped (duplicates or blank)"
+        f"{cutoff_note}."
     )
 
 

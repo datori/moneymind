@@ -23,19 +23,19 @@ The `GET /` route SHALL display a summary dashboard with net worth, spending, an
 ---
 
 ### Requirement: Accounts page
-The `GET /accounts` route SHALL display all active accounts with current balances AND a "Data Coverage" section below the balance table.
+The `GET /accounts` route SHALL display a unified page with a global summary bar at the top and a single rich per-account table. The route calls `get_data_overview(conn)` to populate both the summary bar and per-account columns.
 
-#### Scenario: Accounts page loads
+#### Scenario: Unified accounts page loads
 - **WHEN** a browser navigates to `/accounts`
-- **THEN** a table of accounts is shown with columns: name, type, institution, balance, last updated; followed by a "Data Coverage" section showing per-account transaction count, date range (formatted as "Mon YY – Mon YY"), and last sync time
+- **THEN** the page displays a global summary bar reading "X accounts · Y transactions · YYYY-MM-DD – YYYY-MM-DD" followed by a single table with columns: Account Name, Institution, Type, Balance, Txn Count, Date Range, Last Synced, Actions
 
-#### Scenario: Accounts page global summary
-- **WHEN** a browser navigates to `/accounts`
-- **THEN** the "Data Coverage" section includes a header line reading "X transactions across Y accounts, covering Z months"
-
-#### Scenario: Accounts page coverage for account with no transactions
+#### Scenario: Accounts with no transactions shown in unified table
 - **WHEN** an active account has zero stored transactions
-- **THEN** its row in the Data Coverage section shows "0" for transaction count and "—" for date range
+- **THEN** its row shows "0" for Txn Count, "—" for Date Range, and "Never" (or "—") for Last Synced
+
+#### Scenario: Balance column shows value or dash
+- **WHEN** an account has a current balance recorded
+- **THEN** the Balance column shows "$X.XX" (negative balances in red); when no balance is recorded it shows "—"
 
 ---
 
@@ -95,20 +95,69 @@ The dashboard SHALL include a "Sync Now" button that triggers a SimpleFIN sync.
 
 ---
 
-### Requirement: Data page shows full data coverage overview
-The `GET /data` route SHALL display a dedicated "Data" page with a global summary header and a per-account coverage table.
+### Requirement: /data redirects to /accounts
+`GET /data` SHALL return HTTP 301 to `/accounts`. The separate data coverage page is subsumed by the unified accounts page.
 
-#### Scenario: Data page loads with transaction data
-- **WHEN** a browser navigates to `/data`
-- **THEN** the page displays a global summary header reading "X transactions across Y accounts, covering Z months" and a table listing each active account with columns: name, institution, transaction count, date range (formatted as "Mon YY – Mon YY"), and last sync time
+#### Scenario: /data redirect
+- **WHEN** a browser or HTTP client issues `GET /data`
+- **THEN** the response is HTTP 301 with `Location: /accounts`
 
-#### Scenario: Data page with an account that has no transactions
-- **WHEN** an active account has zero stored transactions
-- **THEN** that account row shows "0" for transaction count, "—" for date range, and either the last sync time or "Never"
+---
 
-#### Scenario: Data page with no data at all
-- **WHEN** the database has no active accounts
-- **THEN** the page displays the global summary header with zeroes and an empty table (or a "No accounts configured" message)
+### Requirement: Nav "Data" link removed
+The navigation bar SHALL NOT contain a "Data" link. The "Accounts" link SHALL remain and point to `/accounts`.
+
+#### Scenario: Nav does not show Data link
+- **WHEN** any page in the dashboard is loaded
+- **THEN** the navigation bar shows: Dashboard, Accounts, Transactions, Net Worth, Spending, Pipeline, Review, Recurring — with no "Data" entry
+
+---
+
+### Requirement: Spending page include_financial toggle
+`GET /spending` SHALL accept an `include_financial` query parameter (value `"1"` = include, absent or `"0"` = exclude). When absent or `"0"`, transactions in categories Financial, Income, and Investment are excluded from the spending query. The page SHALL render a visible "Include Financial Activity" checkbox that reflects the current state and resubmits the form when changed.
+
+#### Scenario: Default spending excludes financial categories
+- **WHEN** a browser navigates to `/spending` with no `include_financial` param
+- **THEN** the spending results exclude Financial, Income, and Investment; the checkbox is unchecked
+
+#### Scenario: include_financial=1 includes all categories
+- **WHEN** a browser navigates to `/spending?include_financial=1`
+- **THEN** the spending results include all categories; the checkbox is checked
+
+#### Scenario: Toggle state preserved in form submission
+- **WHEN** the user selects a date range and checks "Include Financial Activity" and clicks Apply
+- **THEN** the resulting URL contains both the date params and `include_financial=1`
+
+---
+
+### Requirement: get_spending_summary accepts exclude_categories parameter
+`get_spending_summary()` in `finance/analysis/spending.py` SHALL accept an optional `exclude_categories` parameter (list of str, default `None`). When provided and non-empty, the SQL query SHALL add a `WHERE t.category NOT IN (...)` clause to exclude those categories.
+
+#### Scenario: exclude_categories filters spending query
+- **WHEN** `get_spending_summary(conn, start, end, exclude_categories=['Financial', 'Income', 'Investment'])` is called
+- **THEN** the returned list contains no rows with label "Financial", "Income", or "Investment"
+
+#### Scenario: exclude_categories=None includes all categories (backward compat)
+- **WHEN** `get_spending_summary(conn, start, end)` is called with no `exclude_categories` argument
+- **THEN** all categories are included, matching prior behavior
+
+---
+
+### Requirement: Dashboard index — "Recent Runs" widget
+
+The `GET /` route SHALL pass a `recent_runs` list to the `index.html` template. The list SHALL contain the 5 most recent rows from `run_log`, ordered by `started_at DESC`. `index.html` SHALL render a "Recent Runs" section showing the runs with columns: Run ID, Type, Started, Duration, Status. Status SHALL be color-coded: green for `success`, yellow for `running`, red for `error`. If no runs exist, the section SHALL display "No pipeline runs yet."
+
+#### Scenario: Dashboard loads with no prior runs
+- **WHEN** a browser navigates to `/` and `run_log` is empty
+- **THEN** the "Recent Runs" section renders with the message "No pipeline runs yet."
+
+#### Scenario: Dashboard loads with recent runs
+- **WHEN** `run_log` contains one or more rows
+- **THEN** the "Recent Runs" widget shows up to 5 most recent runs with their status, start time, and duration
+
+#### Scenario: Running pipeline appears in widget
+- **WHEN** a pipeline run is in progress (`status = 'running'`)
+- **THEN** the dashboard shows that run with a yellow "running" status and no duration (since `finished_at` is NULL)
 
 ---
 

@@ -489,11 +489,18 @@ async def recurring_page(
         for m in timeline["merchants"]
     )
 
+    _attention_statuses = {"past_due", "due_any_day", "due_soon"}
+    attention = [r for r in data if r["status"] in _attention_statuses]
+    active = [r for r in data if r["status"] in ("upcoming", None)]
+    cancelled = [r for r in data if r["status"] == "likely_cancelled"]
+
     return templates.TemplateResponse(
         "recurring.html",
         {
             "request": request,
-            "recurring": data,
+            "attention": attention,
+            "active": active,
+            "cancelled": cancelled,
             "spend_chart_json": spend_chart_json,
             "has_spend_data": has_spend_data,
             "today_index": today_index,

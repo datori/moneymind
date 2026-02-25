@@ -19,77 +19,137 @@
   {% endif %}
 </div>
 
-{% if recurring %}
-<p class="text-sm text-gray-500 mb-4">
-  {{ recurring | length }} recurring merchant(s) detected.
-</p>
-<div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
-  <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
-      <tr>
-        <th class="px-4 py-3 text-left">Merchant</th>
-        <th class="px-4 py-3 text-right">Interval</th>
-        <th class="px-4 py-3 text-right">Typical</th>
-        <th class="px-4 py-3 text-right">Total Spent</th>
-        <th class="px-4 py-3 text-right">Occurrences</th>
-        <th class="px-4 py-3 text-left">Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in recurring %}
-      <tr class="border-t border-gray-100 hover:bg-gray-50{% if item.status == 'likely_cancelled' %} text-gray-400{% endif %}">
-        <!-- Merchant name links to transaction search -->
-        <td class="px-4 py-2 font-medium">
-          <a href="/transactions?search={{ item.merchant_normalized | urlencode }}&sort_by=amount&sort_dir=desc"
-             class="{% if item.status == 'likely_cancelled' %}text-gray-400 hover:underline{% else %}text-indigo-600 hover:underline{% endif %}">{{ item.merchant_normalized }}</a>
-        </td>
-        <td class="px-4 py-2 text-right {% if item.status == 'likely_cancelled' %}text-gray-400{% else %}text-gray-600{% endif %}">
-          {{ item.interval_label or '—' }}
-        </td>
-        <td class="px-4 py-2 text-right font-medium {% if item.status == 'likely_cancelled' %}text-gray-400{% else %}text-gray-800{% endif %}">
-          ${{ "%.2f"|format(item.typical_amount) }}
-        </td>
-        <td class="px-4 py-2 text-right {% if item.status == 'likely_cancelled' %}text-gray-400{% else %}text-gray-700{% endif %}">
-          ${{ "%.2f"|format(item.total_spent) }}
-        </td>
-        <td class="px-4 py-2 text-right {% if item.status == 'likely_cancelled' %}text-gray-400{% else %}text-gray-600{% endif %}">{{ item.count }}</td>
-        <td class="px-4 py-2">
-          {% if item.status == 'likely_cancelled' %}
-            <span class="inline-flex items-center gap-1.5">
-              <span class="text-gray-400 text-xs">Last ~{{ item.interval_label or (item.interval_days|string + 'd') }}</span>
-              <span class="bg-red-100 text-red-600 text-xs font-medium px-1.5 py-0.5 rounded">Cancelled?</span>
-            </span>
-          {% elif item.status == 'past_due' %}
-            {% set n = item.days_until_next | abs %}
-            {% if n > 60 %}
-              {% set months = (n / 30) | int %}
-              <span class="text-red-600 font-medium">Past due ~{{ months }}mo</span>
-            {% else %}
-              <span class="text-red-600 font-medium">Past due {{ n }}d</span>
-            {% endif %}
-          {% elif item.status == 'due_any_day' %}
-            <span class="text-blue-600 font-medium">Due any day</span>
-          {% elif item.status == 'due_soon' %}
-            <span class="text-amber-600 font-medium">Due in {{ item.days_until_next }}d</span>
-          {% elif item.status == 'upcoming' %}
-            {% set n = item.days_until_next %}
-            {% if n > 30 %}
-              {% set months = (n / 30) | int %}
-              <span class="text-gray-500">Due in ~{{ months }}mo</span>
-            {% else %}
-              <span class="text-gray-500">Due in {{ n }}d</span>
-            {% endif %}
-          {% else %}
-            <span class="text-gray-400">—</span>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{# --- Macros --- #}
+{% macro table_header() %}
+<thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+  <tr>
+    <th class="px-4 py-3 text-left">Merchant</th>
+    <th class="px-4 py-3 text-right">Interval</th>
+    <th class="px-4 py-3 text-right">Typical</th>
+    <th class="px-4 py-3 text-right">Next Due</th>
+    <th class="px-4 py-3 text-left">Status</th>
+  </tr>
+</thead>
+{% endmacro %}
+
+{% macro status_cell(item) %}
+  {% if item.status == 'likely_cancelled' %}
+    <span class="inline-flex items-center gap-1.5">
+      <span class="text-gray-400 text-xs">Last ~{{ item.interval_label or (item.interval_days|string + 'd') }}</span>
+      <span class="bg-red-100 text-red-600 text-xs font-medium px-1.5 py-0.5 rounded">Cancelled?</span>
+    </span>
+  {% elif item.status == 'past_due' %}
+    {% set n = item.days_until_next | abs %}
+    {% if n > 60 %}
+      {% set months = (n / 30) | int %}
+      <span class="text-red-600 font-medium">Past due ~{{ months }}mo</span>
+    {% else %}
+      <span class="text-red-600 font-medium">Past due {{ n }}d</span>
+    {% endif %}
+  {% elif item.status == 'due_any_day' %}
+    <span class="text-blue-600 font-medium">Due any day</span>
+  {% elif item.status == 'due_soon' %}
+    <span class="text-amber-600 font-medium">Due in {{ item.days_until_next }}d</span>
+  {% elif item.status == 'upcoming' %}
+    {% set n = item.days_until_next %}
+    {% if n > 30 %}
+      {% set months = (n / 30) | int %}
+      <span class="text-gray-500">Due in ~{{ months }}mo</span>
+    {% else %}
+      <span class="text-gray-500">Due in {{ n }}d</span>
+    {% endif %}
+  {% else %}
+    <span class="text-gray-400">—</span>
+  {% endif %}
+{% endmacro %}
+
+{# --- Needs Attention --- #}
+{% if attention %}
+<div class="mb-4">
+  <div class="flex items-center gap-2 mb-2 px-1">
+    <h2 class="text-sm font-semibold text-red-700 uppercase tracking-wide">Needs Attention</h2>
+    <span class="text-xs text-red-400">({{ attention | length }})</span>
+  </div>
+  <div class="bg-white rounded-lg border border-red-100 shadow-sm overflow-x-auto">
+    <table class="w-full text-sm">
+      {{ table_header() }}
+      <tbody>
+        {% for item in attention %}
+        <tr class="border-t border-gray-100 hover:bg-gray-50 border-l-4 {% if item.status == 'past_due' %}border-red-500{% elif item.status == 'due_any_day' %}border-blue-500{% else %}border-amber-400{% endif %}">
+          <td class="px-4 py-2 font-medium">
+            <a href="/transactions?search={{ item.merchant_normalized | urlencode }}&sort_by=amount&sort_dir=desc"
+               class="text-indigo-600 hover:underline">{{ item.merchant_normalized }}</a>
+          </td>
+          <td class="px-4 py-2 text-right text-gray-600">{{ item.interval_label or '—' }}</td>
+          <td class="px-4 py-2 text-right font-medium text-gray-800">${{ "%.2f"|format(item.typical_amount) }}</td>
+          <td class="px-4 py-2 text-right text-gray-600">{{ item.next_due_date or '—' }}</td>
+          <td class="px-4 py-2">{{ status_cell(item) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
-<p class="text-xs text-gray-400 mt-2">{{ recurring | length }} recurring merchant(s). Status based on last charge date and inferred interval.</p>
-{% else %}
+{% endif %}
+
+{# --- Active Subscriptions --- #}
+{% if active %}
+<div class="mb-4">
+  <div class="flex items-center gap-2 mb-2 px-1">
+    <h2 class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Active Subscriptions</h2>
+    <span class="text-xs text-gray-400">({{ active | length }})</span>
+  </div>
+  <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
+    <table class="w-full text-sm">
+      {{ table_header() }}
+      <tbody>
+        {% for item in active %}
+        <tr class="border-t border-gray-100 hover:bg-gray-50">
+          <td class="px-4 py-2 font-medium">
+            <a href="/transactions?search={{ item.merchant_normalized | urlencode }}&sort_by=amount&sort_dir=desc"
+               class="text-indigo-600 hover:underline">{{ item.merchant_normalized }}</a>
+          </td>
+          <td class="px-4 py-2 text-right text-gray-600">{{ item.interval_label or '—' }}</td>
+          <td class="px-4 py-2 text-right font-medium text-gray-800">${{ "%.2f"|format(item.typical_amount) }}</td>
+          <td class="px-4 py-2 text-right text-gray-600">{{ item.next_due_date or '—' }}</td>
+          <td class="px-4 py-2">{{ status_cell(item) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# --- Likely Cancelled (collapsed) --- #}
+{% if cancelled %}
+<details class="mb-4">
+  <summary class="cursor-pointer text-sm text-gray-500 hover:text-gray-700 px-1 py-2 select-none">
+    Likely Cancelled ({{ cancelled | length }})
+  </summary>
+  <div class="mt-2 bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
+    <table class="w-full text-sm">
+      {{ table_header() }}
+      <tbody>
+        {% for item in cancelled %}
+        <tr class="border-t border-gray-100 text-gray-400">
+          <td class="px-4 py-2 font-medium">
+            <a href="/transactions?search={{ item.merchant_normalized | urlencode }}&sort_by=amount&sort_dir=desc"
+               class="text-gray-400 hover:underline">{{ item.merchant_normalized }}</a>
+          </td>
+          <td class="px-4 py-2 text-right">{{ item.interval_label or '—' }}</td>
+          <td class="px-4 py-2 text-right font-medium">${{ "%.2f"|format(item.typical_amount) }}</td>
+          <td class="px-4 py-2 text-right">{{ item.next_due_date or '—' }}</td>
+          <td class="px-4 py-2">{{ status_cell(item) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endif %}
+
+{% if not attention and not active and not cancelled %}
 <p class="text-gray-500 text-sm">No recurring charges detected.</p>
 {% endif %}
 

@@ -96,6 +96,7 @@
           <th class="px-4 py-2 text-left">Status</th>
           <th class="px-4 py-2 text-right">Txns</th>
           <th class="px-4 py-2 text-right">Tokens</th>
+          <th class="px-4 py-2 text-right">Cost</th>
           <th class="px-4 py-2 text-left">Error</th>
         </tr>
       </thead>
@@ -139,6 +140,13 @@
           <td class="px-4 py-2 text-right text-gray-600">
             {% if run.summary and run.summary.tokens_in is defined %}
               {{ (run.summary.tokens_in + run.summary.tokens_out) | int }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td class="px-4 py-2 text-right text-gray-600">
+            {% if run.computed_cost_usd is not none %}
+              ${{ "%.4f"|format(run.computed_cost_usd) }}
             {% else %}
               —
             {% endif %}

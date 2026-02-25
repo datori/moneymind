@@ -25,6 +25,13 @@ from finance.ai.pipeline import run_pipeline
 from finance.ingestion.sync import sync_all
 
 # ---------------------------------------------------------------------------
+# LLM pricing constants (claude-haiku-4-5-20251001)
+# ---------------------------------------------------------------------------
+
+HAIKU_INPUT_COST_PER_M = 0.80   # $ per 1,000,000 input tokens
+HAIKU_OUTPUT_COST_PER_M = 4.00  # $ per 1,000,000 output tokens
+
+# ---------------------------------------------------------------------------
 # App and template setup
 # ---------------------------------------------------------------------------
 
@@ -453,13 +460,23 @@ async def pipeline_page(
             "SELECT * FROM run_log ORDER BY started_at DESC LIMIT 20"
         ).fetchall()
         runs = [dict(r) for r in runs]
-        # Parse summary JSON for template access
+        # Parse summary JSON for template access; compute LLM cost
         for run in runs:
             if run.get("summary"):
                 try:
                     run["summary"] = json.loads(run["summary"])
                 except (json.JSONDecodeError, TypeError):
                     run["summary"] = None
+            summary = run.get("summary") or {}
+            tokens_in = summary.get("tokens_in")
+            tokens_out = summary.get("tokens_out")
+            if tokens_in is not None and tokens_out is not None:
+                run["computed_cost_usd"] = (
+                    tokens_in * HAIKU_INPUT_COST_PER_M
+                    + tokens_out * HAIKU_OUTPUT_COST_PER_M
+                ) / 1_000_000
+            else:
+                run["computed_cost_usd"] = None
     except sqlite3.OperationalError:
         runs = []
 

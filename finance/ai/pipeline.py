@@ -25,7 +25,7 @@ load_dotenv()
 ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
 
 _MODEL = "claude-haiku-4-5-20251001"
-_MAX_TOKENS = 4096
+_MAX_TOKENS = 8096
 _CLUSTER_BATCH_SIZE = 40
 
 logger = logging.getLogger(__name__)
@@ -172,10 +172,13 @@ def _pipeline_batch(clusters: list[dict]) -> tuple[list[dict], int, int]:
                 "category": str,           # one of CATEGORIES
                 "canonical_name": str,
                 "is_recurring": 0 | 1,
-                "transactions": [
-                    {"id": str, "needs_review": 0|1, "review_reason": str|null}
-                ]
+                "review_ids": [str, ...],  # sparse — only IDs needing review
+                "review_reason": str | null
             }
+
+    The response schema uses a sparse ``review_ids`` list rather than echoing
+    every transaction ID back — this keeps response tokens bounded even for
+    merchants with many transactions.
 
     Raises:
         anthropic.APIError: On API failure (caller wraps in try/except).
@@ -183,7 +186,8 @@ def _pipeline_batch(clusters: list[dict]) -> tuple[list[dict], int, int]:
     """
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    # Build a compact representation of each cluster for the prompt
+    # Build a compact representation of each cluster for the prompt.
+    # Send transaction_ids so the model can return specific IDs in review_ids.
     cluster_payload = []
     for c in clusters:
         cluster_payload.append(
@@ -208,12 +212,11 @@ def _pipeline_batch(clusters: list[dict]) -> tuple[list[dict], int, int]:
         "  - category: exactly one category from the list above\n"
         "  - canonical_name: a clean, human-readable merchant name (e.g. 'Netflix', 'Amazon')\n"
         "  - is_recurring: 1 if this looks like a subscription/recurring charge, 0 otherwise\n"
-        "  - transactions: array of objects, one per transaction_id in the cluster:\n"
-        "      - id: the transaction id\n"
-        "      - needs_review: 1 if this specific transaction should be flagged for human review "
-        "(unusual amount, possible duplicate, suspicious description, first appearance of "
-        "large charge, etc.), 0 otherwise\n"
-        "      - review_reason: short explanation string if needs_review=1, null otherwise\n\n"
+        "  - review_ids: list of transaction ids (from the input) that need human review due to\n"
+        "    unusual amount, possible duplicate, suspicious description, or first large charge.\n"
+        "    Use an empty list [] if no transactions need review. DO NOT echo all transaction ids —\n"
+        "    only include ids that specifically warrant review.\n"
+        "  - review_reason: a single short string explaining the review flag (null if review_ids is empty)\n\n"
         "Return ONLY a JSON array. No explanation, no markdown fences.\n\n"
         f"Merchant clusters:\n{payload_json}"
     )
@@ -262,6 +265,7 @@ def _pipeline_batch(clusters: list[dict]) -> tuple[list[dict], int, int]:
 def _apply_results(
     conn: sqlite3.Connection,
     results: list[dict],
+    cluster_lookup: dict[str, list[str]],
     run_id: int,
     batch_index: int,
     tokens_in: int,
@@ -272,7 +276,12 @@ def _apply_results(
     """Write pipeline results back to the transactions table.
 
     Updates category, categorized_at, merchant_normalized, is_recurring,
-    needs_review, and review_reason for every transaction ID referenced in results.
+    needs_review, and review_reason for every transaction in each cluster.
+
+    Cluster-level fields (category, canonical_name, is_recurring) are applied
+    to ALL transaction IDs in the cluster (sourced from ``cluster_lookup``).
+    Per-transaction review flags use the sparse ``review_ids`` list from the
+    model response — only listed IDs get needs_review=1.
 
     Also inserts a run_steps row for this write-results operation.
 
@@ -280,22 +289,25 @@ def _apply_results(
     """
     step_start = now_ms()
     updated = 0
+    categorized_at = now_ms()
 
     for cluster_result in results:
+        merchant_key: str = cluster_result.get("merchant_key", "")
         category: str = cluster_result.get("category", "Other")
         if category not in CATEGORIES:
             category = "Other"
         canonical_name: str = cluster_result.get("canonical_name", "")
         is_recurring: int = int(bool(cluster_result.get("is_recurring", 0)))
-        txn_results: list[dict] = cluster_result.get("transactions", [])
-        categorized_at = now_ms()
+        review_ids: set[str] = set(cluster_result.get("review_ids") or [])
+        review_reason: str | None = cluster_result.get("review_reason") or None
 
-        for txn in txn_results:
-            txn_id = txn.get("id")
-            if not txn_id:
-                continue
-            needs_review: int = int(bool(txn.get("needs_review", 0)))
-            review_reason: str | None = txn.get("review_reason") or None
+        # All transaction IDs for this merchant come from our own cluster data,
+        # not from the model response — avoids echoing thousands of IDs back.
+        all_txn_ids = cluster_lookup.get(merchant_key, [])
+
+        for txn_id in all_txn_ids:
+            needs_review: int = 1 if txn_id in review_ids else 0
+            txn_review_reason: str | None = review_reason if needs_review else None
 
             conn.execute(
                 """
@@ -314,7 +326,7 @@ def _apply_results(
                     canonical_name,
                     is_recurring,
                     needs_review,
-                    review_reason,
+                    txn_review_reason,
                     txn_id,
                 ),
             )
@@ -440,6 +452,10 @@ def run_pipeline(
 
         clusters = _build_clusters(conn)
         cluster_count = len(clusters)
+        # Build lookup {merchant_key -> [transaction_ids]} for use in _apply_results
+        cluster_lookup: dict[str, list[str]] = {
+            c["merchant_key"]: c["transaction_ids"] for c in clusters
+        }
 
         # Count total transactions across clusters
         transaction_count = sum(len(c["transaction_ids"]) for c in clusters)
@@ -604,6 +620,7 @@ def run_pipeline(
                 written = _apply_results(
                     conn,
                     results,
+                    cluster_lookup,
                     run_id,
                     batch_num,
                     tokens_in,

@@ -332,7 +332,7 @@ def normalize_apple(row: dict, account_id: str) -> Transaction | None:
         A :class:`Transaction` or ``None`` to skip the row.
     """
     txn_type = (row.get("Type") or "").strip()
-    if txn_type == "Payments":
+    if txn_type == "Payment":
         return None
 
     date_raw = (row.get("Transaction Date") or "").strip()

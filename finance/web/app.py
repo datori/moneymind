@@ -19,7 +19,7 @@ from finance.ai.categories import CATEGORIES
 from finance.analysis.accounts import get_accounts, get_credit_utilization, get_transaction_timeline
 from finance.analysis.overview import get_data_overview
 from finance.analysis.net_worth import get_balance_history, get_net_worth
-from finance.analysis.review import get_recurring, get_review_queue
+from finance.analysis.review import get_recurring, get_recurring_spend_timeline, get_review_queue
 from finance.analysis.spending import get_spending_summary, get_transactions
 from finance.ai.pipeline import run_pipeline
 from finance.ingestion.sync import sync_all
@@ -411,11 +411,93 @@ async def recurring_page(
     request: Request,
     conn: sqlite3.Connection = Depends(get_db),
 ):
-    """Recurring charges summary."""
+    """Recurring charges summary with spend timeline chart."""
+    from calendar import month_abbr
+
     data = get_recurring(conn)
+    timeline = get_recurring_spend_timeline(conn)
+
+    _palette = [
+        "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#3b82f6",
+        "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#84cc16",
+    ]
+
+    def _fmt_month(ym: str) -> str:
+        y, m = ym.split("-")
+        return f"{month_abbr[int(m)]} '{y[2:]}"
+
+    all_labels = [_fmt_month(m) for m in timeline["months"]] + \
+                 [_fmt_month(m) for m in timeline["future_months"]]
+
+    # today_index: index of last past month (divider sits after this column)
+    today_index = len(timeline["months"]) - 1
+
+    # Actual spend datasets (stacked)
+    actual_datasets = [
+        {
+            "label": m["name"],
+            "data": m["actual"] + [None] * len(timeline["future_months"]),
+            "backgroundColor": _palette[i % len(_palette)],
+            "borderRadius": 2,
+            "stack": "actual",
+        }
+        for i, m in enumerate(timeline["merchants"])
+    ]
+
+    # Ghost dataset (combined, non-stacked)
+    ghost_totals = [0.0] * len(timeline["months"])
+    for m in timeline["merchants"]:
+        for idx, val in enumerate(m["ghost"]):
+            ghost_totals[idx] += val
+    ghost_totals = [round(v, 2) for v in ghost_totals]
+    ghost_dataset = {
+        "label": "Expected (not received)",
+        "data": ghost_totals + [None] * len(timeline["future_months"]),
+        "backgroundColor": "rgba(156,163,175,0.12)",
+        "borderColor": "#9ca3af",
+        "borderWidth": 1.5,
+        "stack": "ghost",
+        "order": 10,
+    }
+
+    # Projected datasets (stacked, 40% opacity)
+    def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+        h = hex_color.lstrip("#")
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return f"rgba({r},{g},{b},{alpha})"
+
+    projected_datasets = [
+        {
+            "label": f"{m['name']} (projected)",
+            "data": [None] * len(timeline["months"]) + m["projected"],
+            "backgroundColor": _hex_to_rgba(_palette[i % len(_palette)], 0.4),
+            "borderRadius": 2,
+            "stack": "projected",
+        }
+        for i, m in enumerate(timeline["merchants"])
+        if any(v > 0 for v in m["projected"])
+    ]
+
+    spend_chart_json = json.dumps({
+        "labels": all_labels,
+        "datasets": actual_datasets + [ghost_dataset] + projected_datasets,
+        "todayIndex": today_index,
+    })
+
+    has_spend_data = any(
+        sum(m["actual"]) > 0 or sum(m["projected"]) > 0
+        for m in timeline["merchants"]
+    )
+
     return templates.TemplateResponse(
         "recurring.html",
-        {"request": request, "recurring": data},
+        {
+            "request": request,
+            "recurring": data,
+            "spend_chart_json": spend_chart_json,
+            "has_spend_data": has_spend_data,
+            "today_index": today_index,
+        },
     )
 
 

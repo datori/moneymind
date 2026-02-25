@@ -4,6 +4,21 @@
 {% block content %}
 <h1 class="text-2xl font-bold mb-4">Recurring Charges</h1>
 
+<!-- Spend Timeline Chart -->
+<div class="bg-white rounded-lg border border-gray-200 shadow-sm px-5 py-4 mb-6">
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <h2 class="text-sm font-semibold text-gray-700">Monthly Recurring Spend</h2>
+    <span class="text-gray-300 text-xs">last 13 months + 3 projected</span>
+  </div>
+  {% if has_spend_data %}
+  <div style="height: 240px;">
+    <canvas id="spendChart"></canvas>
+  </div>
+  {% else %}
+  <p class="text-sm text-gray-400 text-center py-8">No recurring spend data available.</p>
+  {% endif %}
+</div>
+
 {% if recurring %}
 <p class="text-sm text-gray-500 mb-4">
   {{ recurring | length }} recurring merchant(s) detected.
@@ -22,24 +37,29 @@
     </thead>
     <tbody>
       {% for item in recurring %}
-      <tr class="border-t border-gray-100 hover:bg-gray-50">
+      <tr class="border-t border-gray-100 hover:bg-gray-50{% if item.status == 'likely_cancelled' %} text-gray-400{% endif %}">
         <!-- Merchant name links to transaction search -->
         <td class="px-4 py-2 font-medium">
           <a href="/transactions?search={{ item.merchant_normalized | urlencode }}&sort_by=amount&sort_dir=desc"
-             class="text-indigo-600 hover:underline">{{ item.merchant_normalized }}</a>
+             class="{% if item.status == 'likely_cancelled' %}text-gray-400 hover:underline{% else %}text-indigo-600 hover:underline{% endif %}">{{ item.merchant_normalized }}</a>
         </td>
-        <td class="px-4 py-2 text-right text-gray-600">
+        <td class="px-4 py-2 text-right {% if item.status == 'likely_cancelled' %}text-gray-400{% else %}text-gray-600{% endif %}">
           {{ item.interval_label or '—' }}
         </td>
-        <td class="px-4 py-2 text-right font-medium text-gray-800">
+        <td class="px-4 py-2 text-right font-medium {% if item.status == 'likely_cancelled' %}text-gray-400{% else %}text-gray-800{% endif %}">
           ${{ "%.2f"|format(item.typical_amount) }}
         </td>
-        <td class="px-4 py-2 text-right text-gray-700">
+        <td class="px-4 py-2 text-right {% if item.status == 'likely_cancelled' %}text-gray-400{% else %}text-gray-700{% endif %}">
           ${{ "%.2f"|format(item.total_spent) }}
         </td>
-        <td class="px-4 py-2 text-right text-gray-600">{{ item.count }}</td>
+        <td class="px-4 py-2 text-right {% if item.status == 'likely_cancelled' %}text-gray-400{% else %}text-gray-600{% endif %}">{{ item.count }}</td>
         <td class="px-4 py-2">
-          {% if item.status == 'past_due' %}
+          {% if item.status == 'likely_cancelled' %}
+            <span class="inline-flex items-center gap-1.5">
+              <span class="text-gray-400 text-xs">Last ~{{ item.interval_label or (item.interval_days|string + 'd') }}</span>
+              <span class="bg-red-100 text-red-600 text-xs font-medium px-1.5 py-0.5 rounded">Cancelled?</span>
+            </span>
+          {% elif item.status == 'past_due' %}
             {% set n = item.days_until_next | abs %}
             {% if n > 60 %}
               {% set months = (n / 30) | int %}
@@ -72,4 +92,85 @@
 {% else %}
 <p class="text-gray-500 text-sm">No recurring charges detected.</p>
 {% endif %}
+
+<script>
+(function() {
+  const raw = {{ spend_chart_json | safe }};
+  const canvas = document.getElementById('spendChart');
+  if (!canvas || !raw.datasets || raw.datasets.length === 0) return;
+
+  const todayIndex = raw.todayIndex;
+  const hasMultipleMerchants = raw.datasets.filter(d => d.stack === 'actual').length > 1;
+
+  // Today-divider afterDraw plugin
+  const dividerPlugin = {
+    id: 'todayDivider',
+    afterDraw(chart) {
+      if (todayIndex == null) return;
+      const { ctx, chartArea, scales } = chart;
+      const xScale = scales.x;
+      // Position between todayIndex and todayIndex+1
+      const x0 = xScale.getPixelForValue(todayIndex);
+      const x1 = xScale.getPixelForValue(todayIndex + 1);
+      const xMid = (x0 + x1) / 2;
+      ctx.save();
+      ctx.strokeStyle = '#9ca3af';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(xMid, chartArea.top);
+      ctx.lineTo(xMid, chartArea.bottom);
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+
+  new Chart(canvas, {
+    type: 'bar',
+    plugins: [dividerPlugin],
+    data: { labels: raw.labels, datasets: raw.datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: hasMultipleMerchants,
+          position: 'top',
+          labels: {
+            boxWidth: 12,
+            font: { size: 11 },
+            padding: 12,
+            filter: item => item.text !== 'Expected (not received)'
+          }
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          callbacks: {
+            label: ctx => {
+              if (ctx.parsed.y == null || ctx.parsed.y === 0) return null;
+              const prefix = ctx.dataset.stack === 'ghost' ? ' ⊘ ' : ' ';
+              return `${prefix}${ctx.dataset.label}: $${ctx.parsed.y.toFixed(2)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 11 } }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            font: { size: 11 },
+            callback: v => '$' + v
+          },
+          grid: { color: '#f3f4f6' }
+        }
+      }
+    }
+  });
+})();
+</script>
 {% endblock %}

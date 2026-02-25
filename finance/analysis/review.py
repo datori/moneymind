@@ -47,9 +47,10 @@ def get_recurring(conn: sqlite3.Connection) -> list[dict]:
         last_date, interval_days, interval_label,
         next_due_date, days_until_next, status
 
-    Status values: "upcoming", "due_soon", "due_any_day", "past_due", None.
-    Results are sorted by urgency (past_due first, then due_any_day, due_soon,
-    upcoming, then None).
+    Status values: "upcoming", "due_soon", "due_any_day", "past_due",
+    "likely_cancelled", None.
+    Results are sorted by urgency (past_due first, then likely_cancelled,
+    due_any_day, due_soon, upcoming, then None).
     """
     rows = conn.execute(
         """
@@ -140,6 +141,8 @@ def get_recurring(conn: sqlite3.Connection) -> list[dict]:
                 status = "due_soon"
             elif -tolerance <= days_until_next <= 0:
                 status = "due_any_day"
+            elif days_until_next <= -interval_days:
+                status = "likely_cancelled"
             else:
                 status = "past_due"
 
@@ -164,13 +167,192 @@ def get_recurring(conn: sqlite3.Connection) -> list[dict]:
         d = item["days_until_next"]
         if s == "past_due":
             return (0, d if d is not None else 0)      # most overdue first (smallest d)
+        if s == "likely_cancelled":
+            return (1, d if d is not None else 0)      # most overdue first
         if s == "due_any_day":
-            return (1, d if d is not None else 0)
+            return (2, d if d is not None else 0)
         if s == "due_soon":
-            return (2, d if d is not None else 999)    # fewest days first
+            return (3, d if d is not None else 999)    # fewest days first
         if s == "upcoming":
-            return (3, d if d is not None else 999)
-        return (4, 0)                                   # None status last
+            return (4, d if d is not None else 999)
+        return (5, 0)                                   # None status last
 
     result.sort(key=_urgency_key)
     return result
+
+
+def get_recurring_spend_timeline(
+    conn: sqlite3.Connection,
+    months: int = 13,
+    future_months: int = 3,
+) -> dict:
+    """Return monthly recurring spend per merchant for chart rendering.
+
+    Args:
+        conn: An open SQLite connection with row_factory set.
+        months: Number of past calendar months to include (ending with current month).
+        future_months: Number of future calendar months to project.
+
+    Returns:
+        Dict with keys:
+            months: list of YYYY-MM strings (past, ascending), length == months
+            future_months: list of YYYY-MM strings (future, ascending), length == future_months
+            merchants: list of dicts per merchant (only those with 2+ charges), each with:
+                name, actual, ghost, projected, status, typical_amount, interval_days
+    """
+    from collections import defaultdict
+
+    today = date.today()
+
+    # Generate past month list (ending with current month)
+    month_list: list[str] = []
+    for i in range(months - 1, -1, -1):
+        m = today.month - i
+        y = today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        month_list.append(f"{y:04d}-{m:02d}")
+
+    # Generate future month list
+    future_month_list: list[str] = []
+    for i in range(1, future_months + 1):
+        m = today.month + i
+        y = today.year
+        while m > 12:
+            m -= 12
+            y += 1
+        future_month_list.append(f"{y:04d}-{m:02d}")
+
+    rows = conn.execute(
+        """
+        SELECT merchant_normalized, date, amount
+        FROM transactions
+        WHERE is_recurring = 1
+          AND merchant_normalized IS NOT NULL
+          AND merchant_normalized != ''
+        ORDER BY merchant_normalized, date
+        """
+    ).fetchall()
+
+    if not rows:
+        return {"months": month_list, "future_months": future_month_list, "merchants": []}
+
+    groups: dict[str, list[tuple[str, float]]] = defaultdict(list)
+    for row in rows:
+        if row["amount"] is not None and row["date"] is not None:
+            groups[row["merchant_normalized"]].append((row["date"], abs(row["amount"])))
+
+    # Determine window end for projection loop
+    end_ym = future_month_list[-1] if future_month_list else month_list[-1]
+    end_y, end_m = int(end_ym[:4]), int(end_ym[5:])
+    if end_m < 12:
+        window_end = date(end_y, end_m + 1, 1) - timedelta(days=1)
+    else:
+        window_end = date(end_y + 1, 1, 1) - timedelta(days=1)
+
+    past_start_ym = month_list[0]
+    past_start = date(int(past_start_ym[:4]), int(past_start_ym[5:]), 1)
+
+    month_set = set(month_list)
+    future_month_set = set(future_month_list)
+
+    merchant_list = []
+    for merchant, entries in groups.items():
+        dates = sorted(e[0] for e in entries)
+        amounts = [e[1] for e in entries]
+
+        # Need at least 2 charges to compute an interval
+        if len(dates) < 2:
+            continue
+
+        # Typical amount (median)
+        sorted_amounts = sorted(amounts)
+        mid = len(sorted_amounts) // 2
+        if len(sorted_amounts) % 2 == 1:
+            typical = sorted_amounts[mid]
+        else:
+            typical = (sorted_amounts[mid - 1] + sorted_amounts[mid]) / 2.0
+        typical = round(typical, 2)
+
+        # Interval (median gap)
+        date_objs = [datetime.strptime(d, "%Y-%m-%d").date() for d in dates]
+        gaps = [(date_objs[i + 1] - date_objs[i]).days for i in range(len(date_objs) - 1)]
+        gaps_sorted = sorted(gaps)
+        gmid = len(gaps_sorted) // 2
+        if len(gaps_sorted) % 2 == 1:
+            median_gap = gaps_sorted[gmid]
+        else:
+            median_gap = (gaps_sorted[gmid - 1] + gaps_sorted[gmid]) // 2
+        interval_days = max(1, median_gap)
+
+        last_date_obj = datetime.strptime(dates[-1], "%Y-%m-%d").date()
+        next_due_obj = last_date_obj + timedelta(days=interval_days)
+        days_until_next = (next_due_obj - today).days
+        tolerance = max(3, int(interval_days * 0.35))
+
+        if days_until_next > 7:
+            status = "upcoming"
+        elif 1 <= days_until_next <= 7:
+            status = "due_soon"
+        elif -tolerance <= days_until_next <= 0:
+            status = "due_any_day"
+        elif days_until_next <= -interval_days:
+            status = "likely_cancelled"
+        else:
+            status = "past_due"
+
+        # Actual spend per past month
+        actual_map: dict[str, float] = defaultdict(float)
+        for d_str, amt in entries:
+            ym = d_str[:7]
+            if ym in month_set:
+                actual_map[ym] += amt
+
+        # Ghost: expected-but-missing past months
+        # Step backward from last_date by interval_days
+        ghost_map: dict[str, float] = defaultdict(float)
+        cutoff = today - timedelta(days=tolerance)
+        k = 0
+        while True:
+            exp_date = last_date_obj + timedelta(days=k * interval_days)
+            if exp_date < past_start:
+                break
+            ym = exp_date.strftime("%Y-%m")
+            if ym in month_set and exp_date <= cutoff:
+                if actual_map.get(ym, 0.0) == 0.0:
+                    ghost_map[ym] += typical
+            k -= 1
+
+        # Projected: future months (skip if likely_cancelled)
+        projected_map: dict[str, float] = defaultdict(float)
+        if status != "likely_cancelled":
+            k = 1
+            while True:
+                exp_date = last_date_obj + timedelta(days=k * interval_days)
+                if exp_date > window_end:
+                    break
+                ym = exp_date.strftime("%Y-%m")
+                if ym in future_month_set:
+                    projected_map[ym] += typical
+                k += 1
+
+        actual = [round(actual_map.get(m, 0.0), 2) for m in month_list]
+        ghost = [round(ghost_map.get(m, 0.0), 2) for m in month_list]
+        projected = [round(projected_map.get(m, 0.0), 2) for m in future_month_list]
+
+        merchant_list.append({
+            "name": merchant,
+            "actual": actual,
+            "ghost": ghost,
+            "projected": projected,
+            "status": status,
+            "typical_amount": typical,
+            "interval_days": interval_days,
+        })
+
+    return {
+        "months": month_list,
+        "future_months": future_month_list,
+        "merchants": merchant_list,
+    }

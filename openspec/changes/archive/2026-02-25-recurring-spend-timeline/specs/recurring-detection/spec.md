@@ -1,4 +1,4 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: get_recurring analysis function
 `get_recurring(conn)` in `finance/analysis/review.py` SHALL return a list of enriched dicts for distinct `merchant_normalized` values where at least one transaction has `is_recurring=1`. Each dict SHALL include:
@@ -52,58 +52,3 @@ Results SHALL be sorted by urgency: `"past_due"` first (most overdue first), the
 #### Scenario: total_spent reflects all charges
 - **WHEN** a merchant has 3 charges of $9.99, $9.99, and $10.99
 - **THEN** `total_spent` is `30.97`
-
----
-
-### Requirement: finance recurring CLI command
-The system SHALL provide a `finance recurring` CLI command that prints a plain-text summary table of detected recurring charges. Columns: Merchant, Count, Typical Amount.
-
-#### Scenario: Table printed when recurring charges exist
-- **WHEN** `finance recurring` is run and recurring merchants exist
-- **THEN** a table is printed with one row per recurring merchant, ordered by count DESC
-
-#### Scenario: Empty message when none detected
-- **WHEN** `finance recurring` is run and no recurring charges have been detected
-- **THEN** stdout shows "No recurring charges detected. Run `finance sync` to enrich transactions."
-
----
-
-### Requirement: GET /recurring web route — enriched display
-
-The `GET /recurring` route SHALL render an enriched table with columns: Merchant, Interval, Typical Amount, Total Spent, Occurrences, Status. The Status cell SHALL be color-coded:
-
-- `"upcoming"` → gray text "Due in {n}d" (or "Due in ~{n}mo" if > 30 days)
-- `"due_soon"` → amber/yellow "Due in {n}d"
-- `"due_any_day"` → blue "Due any day"
-- `"past_due"` → red "Past due {abs(n)}d" (or "Past due ~{months}mo" if > 60 days overdue)
-- `None` → gray "—"
-
-Rows SHALL be sorted by urgency as returned by `get_recurring()`. The merchant name cell SHALL link to `/transactions?search={merchant_normalized}&sort_by=amount&sort_dir=desc` so the user can view all transactions for that merchant.
-
-#### Scenario: Recurring page loads with enriched data
-- **WHEN** `GET /recurring` is requested and recurring merchants exist
-- **THEN** an HTML table is returned with columns Merchant, Interval, Typical Amount, Total Spent, Occurrences, Status
-
-#### Scenario: Past due row shown in red
-- **WHEN** a merchant's status is `"past_due"`
-- **THEN** its Status cell renders in red (e.g., "Past due 45d")
-
-#### Scenario: Upcoming row shown in gray
-- **WHEN** a merchant's status is `"upcoming"` with `days_until_next=20`
-- **THEN** its Status cell renders "Due in 20d" in gray text
-
-#### Scenario: Due > 30 days shown in months
-- **WHEN** `days_until_next=65`
-- **THEN** the Status cell renders "Due in ~2mo"
-
-#### Scenario: Past due > 60 days shown in months
-- **WHEN** `days_until_next=-90`
-- **THEN** the Status cell renders "Past due ~3mo" in red
-
-#### Scenario: Merchant name links to transactions search
-- **WHEN** the user clicks a merchant name on the recurring page
-- **THEN** the browser navigates to `/transactions?search={merchant_normalized}&sort_by=amount&sort_dir=desc`
-
-#### Scenario: Empty recurring page
-- **WHEN** `GET /recurring` is requested and no recurring charges exist
-- **THEN** the page renders a message: "No recurring charges detected."

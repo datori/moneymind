@@ -1,5 +1,28 @@
 ## ADDED Requirements
 
+### Requirement: apply_recurring_overrides deterministic pass
+`apply_recurring_overrides(conn)` in `finance/analysis/review.py` SHALL set `is_recurring=1` for any transaction whose `(merchant_normalized, ROUND(ABS(amount), 2))` pair appears in 3 or more distinct calendar months (`SUBSTR(date, 1, 7)`).
+
+Only debit transactions (`amount < 0`) with a non-null `merchant_normalized` are considered. Transactions already flagged `is_recurring=1` SHALL be left unchanged (idempotent).
+
+The function SHALL return the count of rows updated.
+
+This function SHALL be called as the final step of `run_pipeline()` after all LLM enrich batches complete, to correct LLM false-negatives.
+
+#### Scenario: Payment-plan charge correctly flagged
+- **WHEN** the same merchant+amount appears in 3+ distinct months with `is_recurring=0`
+- **THEN** `apply_recurring_overrides(conn)` sets all matching rows to `is_recurring=1` and returns a count > 0
+
+#### Scenario: Idempotent on already-flagged transactions
+- **WHEN** all matching transactions already have `is_recurring=1`
+- **THEN** `apply_recurring_overrides(conn)` returns 0 (no rows updated)
+
+#### Scenario: Fewer than 3 months not promoted
+- **WHEN** a merchant+amount pair appears in only 2 distinct months
+- **THEN** `apply_recurring_overrides(conn)` does not change their `is_recurring` flag
+
+---
+
 ### Requirement: get_recurring analysis function
 `get_recurring(conn)` in `finance/analysis/review.py` SHALL return a list of enriched dicts for distinct `merchant_normalized` values where at least one transaction has `is_recurring=1`. Each dict SHALL include:
 

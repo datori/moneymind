@@ -34,7 +34,9 @@ Parameters (all optional): `start_date` (YYYY-MM-DD), `end_date` (YYYY-MM-DD), `
 
 Return shape per transaction:
 ```
-{ id, date, amount, description, merchant_name, category, account_id, account_name, pending }
+{ id, date, amount, description, merchant_name, merchant_normalized,
+  category, account_id, account_name, pending,
+  is_recurring, needs_review, review_reason }
 ```
 
 #### Scenario: Default returns last 30 days

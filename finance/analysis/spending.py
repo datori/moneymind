@@ -37,8 +37,9 @@ def get_transactions(
 
     Returns:
         List of dicts with keys:
-            id, date, amount, description, merchant_name, category,
-            account_id, account_name, pending
+            id, date, amount, description, merchant_name, merchant_normalized,
+            category, account_id, account_name, pending,
+            is_recurring, needs_review, review_reason
     """
     if start_date is None:
         start_date = (date.today() - timedelta(days=30)).isoformat()
@@ -50,10 +51,14 @@ def get_transactions(
             t.amount,
             t.description,
             t.merchant_name,
+            t.merchant_normalized,
             t.category,
             t.account_id,
             a.name  AS account_name,
-            t.pending
+            t.pending,
+            t.is_recurring,
+            t.needs_review,
+            t.review_reason
         FROM transactions t
         LEFT JOIN accounts a ON a.id = t.account_id
         WHERE t.date >= ?

@@ -21,6 +21,13 @@ All analysis functions in `finance/analysis/` SHALL take a `sqlite3.Connection` 
 ### Requirement: get_transactions supports filtering
 `get_transactions(conn, *, start_date, end_date, account_id, category, min_amount, max_amount, limit)` SHALL apply all provided filters as SQL WHERE clauses.
 
+Return shape per transaction:
+```
+{ id, date, amount, description, merchant_name, merchant_normalized,
+  category, account_id, account_name, pending,
+  is_recurring, needs_review, review_reason }
+```
+
 #### Scenario: All filters combined
 - **WHEN** multiple filters are provided simultaneously
 - **THEN** all filters are applied (AND logic)

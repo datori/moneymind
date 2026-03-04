@@ -694,6 +694,38 @@ def run_pipeline(
             })
 
         # -------------------------------------------------------------------
+        # Step 4: Deterministic recurring overrides
+        # -------------------------------------------------------------------
+        from finance.analysis.review import apply_recurring_overrides
+
+        override_start = now_ms()
+        overrides_applied = apply_recurring_overrides(conn)
+        override_end = now_ms()
+
+        conn.execute(
+            """
+            INSERT INTO run_steps
+                (run_id, step_type, started_at, finished_at, request_summary, response_summary)
+            VALUES (?, 'recurring-override', ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                override_start,
+                override_end,
+                json.dumps({}),
+                json.dumps({"overrides_applied": overrides_applied}),
+            ),
+        )
+        conn.commit()
+
+        _emit({
+            "type": "step_done",
+            "step": "recurring-override",
+            "ts": override_end,
+            "data": {"overrides_applied": overrides_applied},
+        })
+
+        # -------------------------------------------------------------------
         # All batches complete — mark run as success, write aggregate summary
         # -------------------------------------------------------------------
         run_end = now_ms()

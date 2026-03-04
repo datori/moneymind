@@ -181,6 +181,51 @@ def get_recurring(conn: sqlite3.Connection) -> list[dict]:
     return result
 
 
+def apply_recurring_overrides(conn: sqlite3.Connection) -> int:
+    """Deterministically set is_recurring=1 for any merchant+amount seen in 3+ distinct months.
+
+    The LLM enrichment pipeline classifies recurring charges by merchant name
+    heuristics, which misses payment-plan charges (e.g. Sweetwater Instruments)
+    and subscription fees billed under generic names. This function applies a
+    pattern-based override: if the same (merchant_normalized, amount) pair
+    appears in 3 or more distinct calendar months it is unambiguously recurring.
+
+    Only transactions with amount < 0 (debits) and a non-null merchant_normalized
+    are considered. Transactions already flagged is_recurring=1 are untouched.
+
+    Returns:
+        Number of transaction rows updated.
+    """
+    pairs = conn.execute(
+        """
+        SELECT merchant_normalized, ROUND(ABS(amount), 2) AS amt
+        FROM transactions
+        WHERE amount < 0
+          AND merchant_normalized IS NOT NULL
+        GROUP BY merchant_normalized, ROUND(ABS(amount), 2)
+        HAVING COUNT(DISTINCT SUBSTR(date, 1, 7)) >= 3
+        """
+    ).fetchall()
+
+    updated = 0
+    for row in pairs:
+        cursor = conn.execute(
+            """
+            UPDATE transactions
+            SET is_recurring = 1
+            WHERE merchant_normalized = ?
+              AND ROUND(ABS(amount), 2) = ?
+              AND amount < 0
+              AND is_recurring = 0
+            """,
+            (row["merchant_normalized"], row["amt"]),
+        )
+        updated += cursor.rowcount
+
+    conn.commit()
+    return updated
+
+
 def get_recurring_spend_timeline(
     conn: sqlite3.Connection,
     months: int = 13,

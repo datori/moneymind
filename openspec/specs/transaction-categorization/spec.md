@@ -114,6 +114,7 @@ The pipeline steps in order are:
 2. **Cluster build**: group all transactions by normalized merchant key using the existing `_normalize_merchant_key` logic (moved from `enrich.py` to `pipeline.py`). Each cluster contains: `merchant_key`, `raw_samples` (up to 5 distinct descriptions), `transaction_ids`, `amounts`.
 3. **Enrich batches**: send up to 40 clusters per batch to Claude Haiku. The prompt returns per-cluster: `category`, `canonical_name`, `is_recurring`, and a `transactions` array with per-transaction `needs_review` / `review_reason`.
 4. **Write results**: bulk-apply all results to the `transactions` table in a single commit per batch.
+5. **Recurring overrides**: call `apply_recurring_overrides(conn)` from `finance/analysis/review.py` to promote any `(merchant_normalized, amount)` pair seen in 3+ distinct months to `is_recurring=1`, correcting LLM false-negatives.
 
 The public entry point SHALL be:
 

@@ -57,9 +57,11 @@ def get_recurring(conn: sqlite3.Connection) -> list[dict]:
         SELECT
             merchant_normalized,
             date,
-            amount
+            amount,
+            category
         FROM transactions
         WHERE is_recurring = 1
+          AND amount < 0
           AND merchant_normalized IS NOT NULL
           AND merchant_normalized != ''
         ORDER BY merchant_normalized, date
@@ -69,12 +71,15 @@ def get_recurring(conn: sqlite3.Connection) -> list[dict]:
     if not rows:
         return []
 
-    from collections import defaultdict
+    from collections import defaultdict, Counter
 
     groups: dict[str, list[tuple[str, float]]] = defaultdict(list)
+    categories: dict[str, Counter] = defaultdict(Counter)
     for row in rows:
         if row["amount"] is not None and row["date"] is not None:
             groups[row["merchant_normalized"]].append((row["date"], abs(row["amount"])))
+            if row["category"]:
+                categories[row["merchant_normalized"]][row["category"]] += 1
 
     today = date.today()
     result = []
@@ -158,6 +163,7 @@ def get_recurring(conn: sqlite3.Connection) -> list[dict]:
                 "next_due_date": next_due_date,
                 "days_until_next": days_until_next,
                 "status": status,
+                "category": categories[merchant].most_common(1)[0][0] if categories[merchant] else None,
             }
         )
 

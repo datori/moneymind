@@ -83,6 +83,18 @@ CREATE TABLE IF NOT EXISTS run_steps (
     tokens_out       INTEGER,
     error_msg        TEXT
 );
+
+CREATE TABLE IF NOT EXISTS monthly_reports (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    month        TEXT NOT NULL UNIQUE,  -- YYYY-MM
+    title        TEXT NOT NULL,
+    generated_at INTEGER NOT NULL,      -- unix ms
+    model_used   TEXT,
+    tokens_in    INTEGER,
+    tokens_out   INTEGER,
+    narrative_md TEXT NOT NULL,         -- full markdown narrative
+    raw_data     TEXT                   -- JSON snapshot of aggregated input data
+);
 """
 
 

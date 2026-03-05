@@ -409,6 +409,9 @@ async def review_approve(
 @app.get("/recurring", response_class=HTMLResponse)
 async def recurring_page(
     request: Request,
+    include_housing: bool = False,
+    include_education: bool = False,
+    include_health: bool = False,
     conn: sqlite3.Connection = Depends(get_db),
 ):
     """Recurring charges summary with spend timeline chart."""
@@ -489,10 +492,72 @@ async def recurring_page(
         for m in timeline["merchants"]
     )
 
+    # Exclude financial/payment items (credit card autopays, etc.) — they are not
+    # subscriptions and double-count spending already tracked via card transactions.
+    data = [r for r in data if r.get("category") != "Financial"]
+    if not include_housing:
+        data = [r for r in data if r.get("category") != "Home & Utilities"]
+    if not include_education:
+        data = [r for r in data if r.get("category") != "Education"]
+    if not include_health:
+        data = [r for r in data if r.get("category") != "Health & Fitness"]
+
     _attention_statuses = {"past_due", "due_any_day", "due_soon"}
     attention = [r for r in data if r["status"] in _attention_statuses]
     active = [r for r in data if r["status"] in ("upcoming", None)]
     cancelled = [r for r in data if r["status"] == "likely_cancelled"]
+
+    # Summary stats
+    def _monthly_equiv(item: dict) -> float:
+        d = item.get("interval_days")
+        if not d:
+            return 0.0
+        return item["typical_amount"] / (d / 30.44)
+
+    non_cancelled = attention + active
+    summary_monthly_total = round(sum(_monthly_equiv(r) for r in non_cancelled), 2)
+    summary_annual_total = round(summary_monthly_total * 12, 2)
+    summary_due_soon_count = sum(
+        1 for r in attention
+        if r.get("days_until_next") is not None and abs(r["days_until_next"]) <= 7
+    )
+
+    # Active cadence groups
+    _cadence_order = ["Weekly", "Monthly", "Quarterly", "Annual", "Other"]
+
+    def _cadence(item: dict) -> str:
+        d = item.get("interval_days")
+        if not d:
+            return "Other"
+        if d <= 10:
+            return "Weekly"
+        if d <= 45:
+            return "Monthly"
+        if d <= 100:
+            return "Quarterly"
+        if d <= 400:
+            return "Annual"
+        return "Other"
+
+    _groups: dict[str, list] = {c: [] for c in _cadence_order}
+    for r in active:
+        _groups[_cadence(r)].append(r)
+
+    active_groups = [
+        {
+            "label": label,
+            "entries": sorted(items, key=lambda r: r["typical_amount"], reverse=True),
+            "subtotal_monthly": round(sum(_monthly_equiv(r) for r in items), 2),
+        }
+        for label in _cadence_order
+        if (items := _groups[label])
+    ]
+
+    # Chart projected total (first future month)
+    chart_projected_total = round(
+        sum(m["projected"][0] for m in timeline["merchants"] if m["projected"]),
+        2,
+    )
 
     return templates.TemplateResponse(
         "recurring.html",
@@ -500,10 +565,18 @@ async def recurring_page(
             "request": request,
             "attention": attention,
             "active": active,
+            "active_groups": active_groups,
             "cancelled": cancelled,
             "spend_chart_json": spend_chart_json,
             "has_spend_data": has_spend_data,
             "today_index": today_index,
+            "summary_monthly_total": summary_monthly_total,
+            "summary_annual_total": summary_annual_total,
+            "summary_due_soon_count": summary_due_soon_count,
+            "chart_projected_total": chart_projected_total,
+            "include_housing": include_housing,
+            "include_education": include_education,
+            "include_health": include_health,
         },
     )
 
@@ -666,6 +739,68 @@ def pipeline_run_stream(request: Request):
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Reports routes
+# ---------------------------------------------------------------------------
+
+
+@app.get("/reports", response_class=HTMLResponse)
+async def reports_page(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Monthly reports list — generated offline via the /finance-report skill."""
+    try:
+        rows = conn.execute(
+            "SELECT id, month, title, generated_at, model_used FROM monthly_reports ORDER BY month DESC"
+        ).fetchall()
+        reports = []
+        for r in rows:
+            entry = dict(r)
+            if entry.get("generated_at"):
+                ts_s = entry["generated_at"] / 1000
+                entry["generated_date"] = datetime.fromtimestamp(ts_s, tz=timezone.utc).strftime("%b %d, %Y")
+            else:
+                entry["generated_date"] = None
+            reports.append(entry)
+    except sqlite3.OperationalError:
+        reports = []
+
+    return templates.TemplateResponse(
+        "reports.html",
+        {"request": request, "reports": reports},
+    )
+
+
+@app.get("/reports/{month}", response_class=HTMLResponse)
+async def report_detail_page(
+    month: str,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Single monthly report detail view."""
+    import re
+
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(status_code=404, detail="Invalid month format")
+
+    try:
+        row = conn.execute(
+            "SELECT * FROM monthly_reports WHERE month = ?", (month,)
+        ).fetchone()
+    except sqlite3.OperationalError:
+        row = None
+
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No report found for {month}")
+
+    report = dict(row)
+    return templates.TemplateResponse(
+        "report_detail.html",
+        {"request": request, "report": report},
     )
 
 

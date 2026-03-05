@@ -99,21 +99,27 @@ def get_spending_summary(
     start_date: str,
     end_date: str,
     group_by: str = "category",
+    include_transfers: bool = False,
 ) -> list[dict]:
     """Return aggregate spending for the given date range.
 
-    Only debit (negative-amount) transactions are included.
+    Only debit (negative-amount) transactions are included. Financial, Income,
+    and Investment categories are excluded by default to avoid double-counting
+    credit card autopayments from the checking account.
 
     Args:
         start_date: Inclusive start date (YYYY-MM-DD).
         end_date: Inclusive end date (YYYY-MM-DD).
         group_by: Dimension to group by: "category", "merchant", or "account".
                   Default "category".
+        include_transfers: If True, include Financial/Income/Investment categories.
+                           May cause double-counting of CC payments. Default False.
 
     Returns a list of {label, total, count} sorted by total descending.
     """
     conn = _conn()
-    return _get_spending_summary(conn, start_date, end_date, group_by=group_by)
+    exclude_cats = None if include_transfers else ["Financial", "Income", "Investment"]
+    return _get_spending_summary(conn, start_date, end_date, group_by=group_by, exclude_categories=exclude_cats)
 
 
 @mcp.tool()
@@ -142,6 +148,98 @@ def sync() -> dict:
 
     conn = _conn()
     return sync_all(conn)
+
+
+# ---------------------------------------------------------------------------
+# Report tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_reports() -> list[dict]:
+    """Return all monthly reports, newest first.
+
+    Each entry contains: id, month, title, generated_at, model_used, tokens_in, tokens_out.
+    The narrative_md and raw_data fields are omitted for brevity — use get_report to fetch those.
+    """
+    conn = _conn()
+    rows = conn.execute(
+        """
+        SELECT id, month, title, generated_at, model_used, tokens_in, tokens_out
+        FROM monthly_reports
+        ORDER BY month DESC
+        """
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@mcp.tool()
+def get_report(month: str) -> dict | None:
+    """Return a single monthly report by month (YYYY-MM), including the full narrative.
+
+    Returns None if no report exists for that month.
+
+    Args:
+        month: The month string in YYYY-MM format (e.g. "2026-02").
+    """
+    conn = _conn()
+    row = conn.execute(
+        "SELECT * FROM monthly_reports WHERE month = ?", (month,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+@mcp.tool()
+def save_report(
+    month: str,
+    title: str,
+    narrative_md: str,
+    model_used: str | None = None,
+    tokens_in: int | None = None,
+    tokens_out: int | None = None,
+    raw_data: str | None = None,
+) -> dict:
+    """Save (or replace) a monthly narrative report to the database.
+
+    If a report for the given month already exists, it is overwritten.
+
+    Args:
+        month: The month in YYYY-MM format (e.g. "2026-02").
+        title: Short human-readable title (e.g. "February 2026 Spending Report").
+        narrative_md: The full narrative in Markdown format.
+        model_used: Optional model identifier used to generate the report.
+        tokens_in: Optional input token count.
+        tokens_out: Optional output token count.
+        raw_data: Optional JSON string of the aggregated data used as input.
+
+    Returns:
+        Dict with the saved report's id and month.
+    """
+    import time as _time
+
+    conn = _conn()
+    generated_at = int(_time.time() * 1000)
+    cursor = conn.execute(
+        """
+        INSERT INTO monthly_reports
+            (month, title, generated_at, model_used, tokens_in, tokens_out, narrative_md, raw_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(month) DO UPDATE SET
+            title        = excluded.title,
+            generated_at = excluded.generated_at,
+            model_used   = excluded.model_used,
+            tokens_in    = excluded.tokens_in,
+            tokens_out   = excluded.tokens_out,
+            narrative_md = excluded.narrative_md,
+            raw_data     = excluded.raw_data
+        """,
+        (month, title, generated_at, model_used, tokens_in, tokens_out, narrative_md, raw_data),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT id FROM monthly_reports WHERE month = ?", (month,)
+    ).fetchone()
+    return {"id": row["id"], "month": month}
 
 
 # ---------------------------------------------------------------------------

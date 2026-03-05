@@ -356,12 +356,14 @@ def net_worth(as_of_date: str | None, as_json: bool) -> None:
     help="Dimension to group spending by.",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
-def spending(start_date: str, end_date: str, group_by: str, as_json: bool) -> None:
+@click.option("--include-financial", "include_financial", is_flag=True, default=False, help="Include Financial, Income, and Investment categories (may double-count CC payments).")
+def spending(start_date: str, end_date: str, group_by: str, as_json: bool, include_financial: bool) -> None:
     """Show aggregate spending for a date range."""
     from finance.analysis.spending import get_spending_summary
 
     conn = _open_db()
-    data = get_spending_summary(conn, start_date, end_date, group_by=group_by)
+    exclude_cats = None if include_financial else ["Financial", "Income", "Investment"]
+    data = get_spending_summary(conn, start_date, end_date, group_by=group_by, exclude_categories=exclude_cats)
 
     if as_json:
         click.echo(json.dumps(data, indent=2))

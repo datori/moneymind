@@ -24,6 +24,7 @@
           <a href="/review" class="text-sm hover:text-indigo-600 {% if request.url.path == '/review' %}font-semibold text-indigo-600{% endif %}">Review</a>
           <a href="/recurring" class="text-sm hover:text-indigo-600 {% if request.url.path == '/recurring' %}font-semibold text-indigo-600{% endif %}">Recurring</a>
           <a href="/pipeline" class="text-sm hover:text-indigo-600 {% if request.url.path == '/pipeline' %}font-semibold text-indigo-600{% endif %}">Pipeline</a>
+          <a href="/reports" class="text-sm hover:text-indigo-600 {% if request.url.path.startswith('/reports') %}font-semibold text-indigo-600{% endif %}">Reports</a>
         </div>
       </div>
       <!-- Desktop: Sync Now -->
@@ -58,6 +59,7 @@
         <a href="/review" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/review' %}font-semibold text-indigo-600{% endif %}">Review</a>
         <a href="/recurring" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/recurring' %}font-semibold text-indigo-600{% endif %}">Recurring</a>
         <a href="/pipeline" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path == '/pipeline' %}font-semibold text-indigo-600{% endif %}">Pipeline</a>
+        <a href="/reports" class="text-sm py-1 hover:text-indigo-600 {% if request.url.path.startswith('/reports') %}font-semibold text-indigo-600{% endif %}">Reports</a>
         <div class="pt-1 border-t border-gray-100">
           <form method="post" action="/sync">
             <button type="submit"

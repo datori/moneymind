@@ -531,6 +531,17 @@ async def recurring_page(
         if r.get("days_until_next") is not None and abs(r["days_until_next"]) <= 7
     )
 
+    # Post-cancel projection: assume all unresolved cancel attempts succeed
+    pending_cancels = [
+        r for r in non_cancelled
+        if r.get("cancel_attempt") and r["cancel_attempt"]["resolved_at"] is None
+    ]
+    pending_cancel_count = len(pending_cancels)
+    post_cancel_monthly = max(
+        0.0,
+        round(summary_monthly_total - sum(_monthly_equiv(r) for r in pending_cancels), 2),
+    )
+
     # Active cadence groups
     _cadence_order = ["Weekly", "Monthly", "Quarterly", "Annual", "Other"]
 
@@ -582,6 +593,8 @@ async def recurring_page(
             "summary_monthly_total": summary_monthly_total,
             "summary_annual_total": summary_annual_total,
             "summary_due_soon_count": summary_due_soon_count,
+            "post_cancel_monthly": post_cancel_monthly,
+            "pending_cancel_count": pending_cancel_count,
             "chart_projected_total": chart_projected_total,
             "include_housing": include_housing,
             "include_education": include_education,

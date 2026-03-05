@@ -37,6 +37,9 @@
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-4 py-3">
     <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Monthly</p>
     <p class="text-xl font-bold text-gray-900">~${{ "%.0f"|format(summary_monthly_total) }}</p>
+    {% if pending_cancel_count > 0 %}
+    <p class="text-xs text-gray-400 mt-0.5">→ ~${{ "%.0f"|format(post_cancel_monthly) }} if {{ pending_cancel_count }} cancel(s) work</p>
+    {% endif %}
   </div>
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-4 py-3">
     <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Annual</p>

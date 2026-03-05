@@ -41,8 +41,13 @@ This function SHALL be called as the final step of `run_pipeline()` after all LL
   - `-tolerance <= days_until_next <= 0` → `"due_any_day"` where `tolerance = max(3, int(interval_days * 0.35))`
   - `-interval_days < days_until_next < -tolerance` → `"past_due"`
   - `days_until_next <= -interval_days` → `"likely_cancelled"`
+- `cancel_attempt` (dict | None): Cancel attempt metadata if a record exists in `recurring_cancel_attempts` for this merchant, otherwise `None`. When present, the dict SHALL include:
+  - `attempted_at` (str): ISO date of the cancel attempt.
+  - `notes` (str | None): Free-text note.
+  - `resolved_at` (str | None): ISO date of resolution, or `None` if unresolved.
+  - `is_zombie` (bool): `True` when `last_date > attempted_at` AND `resolved_at IS NULL`.
 
-Results SHALL be sorted by urgency: `"past_due"` first (most overdue first), then `"likely_cancelled"` (most overdue first), then `"due_any_day"`, then `"due_soon"` (fewest days first), then `"upcoming"` (fewest days first), then `None` status last.
+Results SHALL be sorted by urgency: `"past_due"` first (most overdue first), then `"likely_cancelled"` (most overdue first), then `"due_any_day"`, then `"due_soon"` (fewest days first), then `"upcoming"` (fewest days first), then `None` status last. Zombie merchants (unresolved cancel attempt with `is_zombie=True`) SHALL sort into the urgency tier equivalent to `"past_due"` regardless of their computed `status`.
 
 #### Scenario: Recurring merchants returned with enriched fields
 - **WHEN** three transactions share `merchant_normalized="Netflix"` with `is_recurring=1` and dates `2025-12-15`, `2026-01-15`, `2026-02-15`
@@ -75,6 +80,30 @@ Results SHALL be sorted by urgency: `"past_due"` first (most overdue first), the
 #### Scenario: total_spent reflects all charges
 - **WHEN** a merchant has 3 charges of $9.99, $9.99, and $10.99
 - **THEN** `total_spent` is `30.97`
+
+#### Scenario: cancel_attempt is None when no attempt recorded
+- **WHEN** a merchant has no row in `recurring_cancel_attempts`
+- **THEN** its dict has `cancel_attempt = None`
+
+#### Scenario: cancel_attempt populated when attempt exists
+- **WHEN** a merchant has a row in `recurring_cancel_attempts` with `attempted_at = "2026-03-01"` and `resolved_at = NULL`
+- **THEN** its dict has `cancel_attempt` with `attempted_at = "2026-03-01"`, `resolved_at = None`
+
+#### Scenario: is_zombie True when charges exist after attempt
+- **WHEN** a merchant's `last_date` is `"2026-03-10"` and `attempted_at` is `"2026-03-01"` and `resolved_at` is NULL
+- **THEN** `cancel_attempt["is_zombie"]` is `True`
+
+#### Scenario: is_zombie False when no charges after attempt
+- **WHEN** a merchant's `last_date` is `"2026-02-28"` and `attempted_at` is `"2026-03-01"`
+- **THEN** `cancel_attempt["is_zombie"]` is `False`
+
+#### Scenario: is_zombie False when attempt is resolved
+- **WHEN** a merchant has `last_date > attempted_at` but `resolved_at` is set
+- **THEN** `cancel_attempt["is_zombie"]` is `False`
+
+#### Scenario: Zombie merchant sorts with past_due urgency
+- **WHEN** a zombie merchant exists alongside an `"upcoming"` merchant
+- **THEN** the zombie merchant appears before the upcoming merchant in results
 
 ---
 

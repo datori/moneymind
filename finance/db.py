@@ -95,6 +95,13 @@ CREATE TABLE IF NOT EXISTS monthly_reports (
     narrative_md TEXT NOT NULL,         -- full markdown narrative
     raw_data     TEXT                   -- JSON snapshot of aggregated input data
 );
+
+CREATE TABLE IF NOT EXISTS recurring_cancel_attempts (
+    merchant_normalized TEXT PRIMARY KEY,
+    attempted_at        TEXT NOT NULL,  -- YYYY-MM-DD when user attempted cancellation
+    notes               TEXT,           -- optional free-text note
+    resolved_at         TEXT            -- YYYY-MM-DD when confirmed stopped; NULL = pending
+);
 """
 
 

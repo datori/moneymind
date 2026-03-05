@@ -73,6 +73,17 @@ def get_recurring(conn: sqlite3.Connection) -> list[dict]:
 
     from collections import defaultdict, Counter
 
+    # Load all cancel attempts into a lookup dict
+    try:
+        cancel_rows = conn.execute(
+            "SELECT merchant_normalized, attempted_at, notes, resolved_at FROM recurring_cancel_attempts"
+        ).fetchall()
+        cancel_lookup: dict[str, dict] = {
+            r["merchant_normalized"]: dict(r) for r in cancel_rows
+        }
+    except Exception:
+        cancel_lookup = {}
+
     groups: dict[str, list[tuple[str, float]]] = defaultdict(list)
     categories: dict[str, Counter] = defaultdict(Counter)
     for row in rows:
@@ -151,6 +162,23 @@ def get_recurring(conn: sqlite3.Connection) -> list[dict]:
             else:
                 status = "past_due"
 
+        # Cancel attempt enrichment
+        ca_row = cancel_lookup.get(merchant)
+        if ca_row:
+            is_zombie = (
+                ca_row["resolved_at"] is None
+                and last_date is not None
+                and last_date > ca_row["attempted_at"]
+            )
+            cancel_attempt: dict | None = {
+                "attempted_at": ca_row["attempted_at"],
+                "notes": ca_row["notes"],
+                "resolved_at": ca_row["resolved_at"],
+                "is_zombie": is_zombie,
+            }
+        else:
+            cancel_attempt = None
+
         result.append(
             {
                 "merchant_normalized": merchant,
@@ -164,11 +192,15 @@ def get_recurring(conn: sqlite3.Connection) -> list[dict]:
                 "days_until_next": days_until_next,
                 "status": status,
                 "category": categories[merchant].most_common(1)[0][0] if categories[merchant] else None,
+                "cancel_attempt": cancel_attempt,
             }
         )
 
-    # Sort by urgency
+    # Sort by urgency; zombies (unresolved) sort with past_due tier
     def _urgency_key(item: dict) -> tuple:
+        ca = item.get("cancel_attempt")
+        if ca and ca["is_zombie"] and ca["resolved_at"] is None:
+            return (0, item["days_until_next"] if item["days_until_next"] is not None else 0)
         s = item["status"]
         d = item["days_until_next"]
         if s == "past_due":

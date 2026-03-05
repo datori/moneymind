@@ -503,9 +503,18 @@ async def recurring_page(
         data = [r for r in data if r.get("category") != "Health & Fitness"]
 
     _attention_statuses = {"past_due", "due_any_day", "due_soon"}
-    attention = [r for r in data if r["status"] in _attention_statuses]
-    active = [r for r in data if r["status"] in ("upcoming", None)]
-    cancelled = [r for r in data if r["status"] == "likely_cancelled"]
+    # Zombies (unresolved cancel attempt with charges after attempted_at) always
+    # surface in Needs Attention regardless of their computed status.
+    def _is_zombie(r: dict) -> bool:
+        ca = r.get("cancel_attempt")
+        return bool(ca and ca["is_zombie"] and ca["resolved_at"] is None)
+
+    attention = [
+        r for r in data
+        if r["status"] in _attention_statuses or _is_zombie(r)
+    ]
+    active = [r for r in data if r["status"] in ("upcoming", None) and not _is_zombie(r)]
+    cancelled = [r for r in data if r["status"] == "likely_cancelled" and not _is_zombie(r)]
 
     # Summary stats
     def _monthly_equiv(item: dict) -> float:
@@ -577,7 +586,94 @@ async def recurring_page(
             "include_housing": include_housing,
             "include_education": include_education,
             "include_health": include_health,
+            "today_date": date.today().isoformat(),
         },
+    )
+
+
+def _recurring_redirect_url(
+    include_housing: bool,
+    include_education: bool,
+    include_health: bool,
+) -> str:
+    """Build /recurring redirect URL preserving filter query params."""
+    params = []
+    if include_housing:
+        params.append("include_housing=1")
+    if include_education:
+        params.append("include_education=1")
+    if include_health:
+        params.append("include_health=1")
+    qs = "&".join(params)
+    return f"/recurring?{qs}" if qs else "/recurring"
+
+
+@app.post("/recurring/cancel")
+async def recurring_cancel_upsert(
+    merchant_normalized: str = Form(...),
+    attempted_at: str = Form(...),
+    notes: str = Form(""),
+    include_housing: bool = Form(False),
+    include_education: bool = Form(False),
+    include_health: bool = Form(False),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Record or update a cancellation attempt for a merchant."""
+    conn.execute(
+        """
+        INSERT INTO recurring_cancel_attempts (merchant_normalized, attempted_at, notes, resolved_at)
+        VALUES (?, ?, ?, NULL)
+        ON CONFLICT(merchant_normalized) DO UPDATE SET
+            attempted_at = excluded.attempted_at,
+            notes = excluded.notes,
+            resolved_at = NULL
+        """,
+        (merchant_normalized, attempted_at, notes or None),
+    )
+    conn.commit()
+    return RedirectResponse(
+        _recurring_redirect_url(include_housing, include_education, include_health),
+        status_code=303,
+    )
+
+
+@app.post("/recurring/cancel/resolve")
+async def recurring_cancel_resolve(
+    merchant_normalized: str = Form(...),
+    include_housing: bool = Form(False),
+    include_education: bool = Form(False),
+    include_health: bool = Form(False),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Mark a cancellation attempt as resolved (subscription confirmed stopped)."""
+    conn.execute(
+        "UPDATE recurring_cancel_attempts SET resolved_at = ? WHERE merchant_normalized = ?",
+        (date.today().isoformat(), merchant_normalized),
+    )
+    conn.commit()
+    return RedirectResponse(
+        _recurring_redirect_url(include_housing, include_education, include_health),
+        status_code=303,
+    )
+
+
+@app.post("/recurring/cancel/delete")
+async def recurring_cancel_delete(
+    merchant_normalized: str = Form(...),
+    include_housing: bool = Form(False),
+    include_education: bool = Form(False),
+    include_health: bool = Form(False),
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    """Remove a cancellation attempt record."""
+    conn.execute(
+        "DELETE FROM recurring_cancel_attempts WHERE merchant_normalized = ?",
+        (merchant_normalized,),
+    )
+    conn.commit()
+    return RedirectResponse(
+        _recurring_redirect_url(include_housing, include_education, include_health),
+        status_code=303,
     )
 
 

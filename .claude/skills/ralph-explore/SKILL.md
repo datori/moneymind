@@ -143,6 +143,14 @@ Making the change:
 After the change:
 - Commit with: `explore({slug}): <what changed and why in one line>`
 
+## Tool Reliability Note
+
+Deferred tools (Read, Edit, Grep) require a ToolSearch call to load before first
+use each iteration. If a ToolSearch call appears to hang (no response after ~20
+seconds), fall back to Bash equivalents: `cat` to read files, `python3 -c` or
+`sed` for edits. The Bash tool is always available without loading. Prefer the
+dedicated tools when they load normally — they are safer and more precise.
+
 ## In Scope
 
 {List each in-scope path on its own line}

@@ -97,22 +97,18 @@
             Amount {{ amt_arrow }}
           </a>
         </th>
-        <th class="px-4 py-3 text-center">Pending</th>
       </tr>
     </thead>
     <tbody>
       {% for txn in transactions %}
       <tr class="border-t border-gray-100 hover:bg-gray-50">
-        <td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ txn.date }}</td>
+        <td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ txn.date }}{% if txn.pending %} <span class="inline-block w-1.5 h-1.5 rounded-full bg-yellow-400 ml-1 align-middle" title="Pending"></span>{% endif %}</td>
         <td class="px-4 py-2 max-w-xs truncate" title="{{ txn.description or '' }}">{{ txn.description or '—' }}</td>
         <td class="px-4 py-2 text-gray-600">{{ txn.merchant_name or '—' }}</td>
         <td class="px-4 py-2">{{ category_badge(txn.category) }}</td>
         <td class="px-4 py-2 text-gray-600">{{ txn.account_name or '—' }}</td>
         <td class="px-4 py-2 text-right font-medium {% if txn.amount < 0 %}text-red-600{% else %}text-green-600{% endif %}">
           {% if txn.amount < 0 %}-{% endif %}${{ "%.2f"|format(txn.amount | abs) }}
-        </td>
-        <td class="px-4 py-2 text-center">
-          {% if txn.pending %}<span class="text-yellow-500 text-xs font-medium">Pending</span>{% endif %}
         </td>
       </tr>
       {% endfor %}

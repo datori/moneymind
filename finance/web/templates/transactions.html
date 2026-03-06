@@ -83,7 +83,7 @@
         {% endif %}
         <th class="px-4 py-3 text-left">
           <a href="/transactions?{{ base_params }}&sort_by=date&sort_dir={{ date_dir }}"
-             class="hover:text-gray-700 {% if sort_by == 'date' %}text-gray-700{% endif %}">
+             class="hover:text-indigo-600 {% if sort_by == 'date' %}text-indigo-600 font-semibold{% endif %}">
             Date {{ date_arrow }}
           </a>
         </th>
@@ -93,7 +93,7 @@
         <th class="px-4 py-3 text-left">Account</th>
         <th class="px-4 py-3 text-right">
           <a href="/transactions?{{ base_params }}&sort_by=amount&sort_dir={{ amt_dir }}"
-             class="hover:text-gray-700 {% if sort_by == 'amount' %}text-gray-700{% endif %}">
+             class="hover:text-indigo-600 {% if sort_by == 'amount' %}text-indigo-600 font-semibold{% endif %}">
             Amount {{ amt_arrow }}
           </a>
         </th>

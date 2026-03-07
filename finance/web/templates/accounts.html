@@ -16,6 +16,55 @@
 </div>
 {% endif %}
 
+{% if credit_util and credit_util.cards %}
+<!-- Credit Utilization Panel -->
+<div class="bg-white rounded-lg border border-gray-200 shadow-sm px-5 py-4 mb-6">
+  <div class="flex flex-wrap items-center gap-3 mb-3">
+    <h2 class="text-sm font-semibold text-gray-700">Credit Utilization</h2>
+    {% if credit_util.aggregate_pct is not none %}
+    <span class="text-xs text-gray-500">
+      ${{ "{:,.0f}".format(credit_util.total_balance) }} of ${{ "{:,.0f}".format(credit_util.total_limit) }} used
+    </span>
+    <span class="ml-auto text-sm font-semibold {% if credit_util.aggregate_pct >= 70 %}text-red-600{% elif credit_util.aggregate_pct >= 30 %}text-amber-600{% else %}text-emerald-600{% endif %}">
+      {{ "{:.0f}".format(credit_util.aggregate_pct) }}%
+    </span>
+    {% endif %}
+  </div>
+  {% if credit_util.aggregate_pct is not none %}
+  <div class="w-full bg-gray-100 rounded-full h-2 mb-4">
+    <div class="h-2 rounded-full {% if credit_util.aggregate_pct >= 70 %}bg-red-500{% elif credit_util.aggregate_pct >= 30 %}bg-amber-400{% else %}bg-emerald-500{% endif %}"
+         style="width: {{ [credit_util.aggregate_pct, 100] | min }}%"></div>
+  </div>
+  {% endif %}
+  {% if credit_util.cards | length > 1 %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    {% for card in credit_util.cards %}
+    <div class="bg-gray-50 rounded-lg px-3 py-2 text-xs">
+      <div class="font-medium text-gray-700 truncate mb-1">{{ card.name }}</div>
+      <div class="flex items-center gap-2">
+        <span class="text-gray-600">${{ "{:,.0f}".format(card.balance | abs) }}</span>
+        {% if card.limit %}
+        <span class="text-gray-400">/ ${{ "{:,.0f}".format(card.limit) }}</span>
+        <span class="ml-auto font-semibold {% if card.utilization_pct >= 70 %}text-red-600{% elif card.utilization_pct >= 30 %}text-amber-600{% else %}text-emerald-600{% endif %}">
+          {{ "{:.0f}".format(card.utilization_pct) }}%
+        </span>
+        {% else %}
+        <span class="ml-auto text-gray-400 italic">no limit set</span>
+        {% endif %}
+      </div>
+      {% if card.limit %}
+      <div class="w-full bg-gray-200 rounded-full h-1 mt-1.5">
+        <div class="h-1 rounded-full {% if card.utilization_pct >= 70 %}bg-red-400{% elif card.utilization_pct >= 30 %}bg-amber-400{% else %}bg-emerald-400{% endif %}"
+             style="width: {{ [card.utilization_pct, 100] | min }}%"></div>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 <!-- Transaction Timeline Chart -->
 <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-5 py-4 mb-6">
   <div class="flex flex-wrap items-center gap-3 mb-4">

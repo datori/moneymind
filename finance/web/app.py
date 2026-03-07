@@ -190,6 +190,8 @@ async def accounts_page(
         sum(acct["counts"]) > 0 for acct in timeline["accounts"]
     )
 
+    credit_util = get_credit_utilization(conn)
+
     return templates.TemplateResponse(
         "accounts.html",
         {
@@ -200,6 +202,7 @@ async def accounts_page(
             "chart_data_json": chart_data_json,
             "has_chart_data": has_chart_data,
             "selected_account_id": account_id,
+            "credit_util": credit_util,
         },
     )
 

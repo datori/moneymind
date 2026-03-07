@@ -354,6 +354,9 @@ async def spending_page(
     values = [round(row["total"], 2) for row in spending]
     chart_data_json = json.dumps({"labels": labels, "values": values})
 
+    total_spent = round(sum(row["total"] for row in spending), 2)
+    total_count = sum(row["count"] for row in spending)
+
     return templates.TemplateResponse(
         "spending.html",
         {
@@ -364,6 +367,8 @@ async def spending_page(
             "group_by": group_by,
             "include_financial": include_financial,
             "chart_data_json": chart_data_json,
+            "total_spent": total_spent,
+            "total_count": total_count,
         },
     )
 

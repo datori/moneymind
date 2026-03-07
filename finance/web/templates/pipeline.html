@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import category_badge %}
 {% block title %}Pipeline — Finance{% endblock %}
 
 {% block content %}
@@ -42,7 +43,7 @@
       <tbody>
         {% for row in current_state.categories %}
         <tr class="border-t border-gray-100">
-          <td class="px-4 py-2">{{ row.category }}</td>
+          <td class="px-4 py-2">{{ category_badge(row.category) }}</td>
           <td class="px-4 py-2 text-right text-gray-600">{{ row.count }}</td>
         </tr>
         {% endfor %}
@@ -105,9 +106,9 @@
         <tr class="border-t border-gray-100">
           <td class="px-4 py-2 text-gray-500">{{ run.id }}</td>
           <td class="px-4 py-2">{{ run.run_type }}</td>
-          <td class="px-4 py-2 text-gray-600">
+          <td class="px-4 py-2 text-gray-600 text-xs">
             {% if run.started_at %}
-              {{ (run.started_at / 1000) | int | string }}
+              <span class="js-rel-time" data-ts="{{ run.started_at }}" title="{{ run.started_at }}">{{ run.started_at }}</span>
             {% else %}
               —
             {% endif %}
@@ -349,5 +350,18 @@
       es.close();
     };
   }
+
+  // Relative timestamps for run history
+  document.querySelectorAll('.js-rel-time').forEach(function(el) {
+    var ts = parseInt(el.dataset.ts);
+    var diff = Date.now() - ts;
+    var mins = Math.floor(diff / 60000);
+    var hours = Math.floor(mins / 60);
+    var days = Math.floor(hours / 24);
+    if (days > 0) el.textContent = days + 'd ago';
+    else if (hours > 0) el.textContent = hours + 'h ago';
+    else if (mins > 0) el.textContent = mins + 'm ago';
+    else el.textContent = 'just now';
+  });
 </script>
 {% endblock %}

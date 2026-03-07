@@ -53,22 +53,22 @@
 
 {% if spending %}
 <!-- Summary strip -->
-<div class="bg-white border border-gray-200 rounded-lg shadow-sm px-5 py-3 mb-4 flex items-center gap-6 text-sm">
+<div class="bg-white border border-gray-200 rounded-lg shadow-sm px-5 py-3 mb-4 flex flex-wrap gap-x-6 gap-y-2 items-center text-sm">
   <div>
     <span class="text-gray-500">Total spent</span>
     <span class="ml-2 text-lg font-semibold text-gray-900">${{ "%.2f"|format(total_spent) }}</span>
   </div>
-  <div class="text-gray-300">|</div>
+  <div class="hidden sm:block text-gray-300">|</div>
   <div>
     <span class="text-gray-500">Transactions</span>
     <span class="ml-2 font-medium text-gray-700">{{ total_count }}</span>
   </div>
-  <div class="text-gray-300">|</div>
+  <div class="hidden sm:block text-gray-300">|</div>
   <div>
     <span class="text-gray-500">{{ group_by | capitalize }}s</span>
     <span class="ml-2 font-medium text-gray-700">{{ spending | length }}</span>
   </div>
-  <div class="text-gray-300">|</div>
+  <div class="hidden sm:block text-gray-300">|</div>
   <div>
     <span class="text-gray-500">Avg/day</span>
     <span class="ml-2 font-medium text-gray-700">${{ "%.2f"|format(avg_per_day) }}</span>

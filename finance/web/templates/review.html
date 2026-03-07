@@ -29,7 +29,7 @@
         <td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ txn.date }}</td>
         <td class="px-4 py-2 text-right font-medium {% if txn.amount and txn.amount < 0 %}text-red-600{% else %}text-green-600{% endif %}">
           {% if txn.amount is not none %}
-            {% if txn.amount < 0 %}-{% endif %}${{ "%.2f"|format(txn.amount | abs) }}
+            {% if txn.amount < 0 %}-{% endif %}${{ "{:,.2f}".format(txn.amount | abs) }}
           {% else %}—{% endif %}
         </td>
         <td class="px-4 py-2 max-w-xs truncate hidden md:table-cell" title="{{ txn.description or '' }}">{{ txn.description or '—' }}</td>

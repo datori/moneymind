@@ -2,7 +2,9 @@
 {% block title %}Net Worth History — Finance{% endblock %}
 
 {% block content %}
-<h1 class="text-2xl font-bold mb-6">Net Worth History</h1>
+<h1 class="text-2xl font-bold mb-4">Net Worth History</h1>
+
+<div id="nw-summary" class="hidden bg-white border border-gray-200 rounded-lg shadow-sm px-5 py-3 mb-4 flex flex-wrap gap-x-6 gap-y-1 items-center text-sm"></div>
 
 <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
   <canvas id="netWorthChart" height="120"></canvas>
@@ -16,6 +18,29 @@
       '<p class="text-gray-500 text-sm py-4">No balance history data yet. Run a sync to get started.</p>';
     return;
   }
+
+  // Populate summary strip
+  const vals = raw.values;
+  const current = vals[vals.length - 1];
+  const first = vals[0];
+  const delta = current - first;
+  const deltaPct = first !== 0 ? (delta / Math.abs(first)) * 100 : null;
+  const fmt = v => '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2 });
+  const sign = delta >= 0 ? '+' : '-';
+  const deltaColor = delta >= 0 ? 'text-green-600' : 'text-red-600';
+  const pctStr = deltaPct !== null ? ` (${sign}${Math.abs(deltaPct).toFixed(1)}%)` : '';
+  const strip = document.getElementById('nw-summary');
+  strip.classList.remove('hidden');
+  strip.innerHTML = `
+    <span class="text-gray-500">Current <span class="font-semibold text-gray-900">${fmt(current)}</span></span>
+    <span class="text-gray-300 hidden sm:inline">·</span>
+    <span class="text-gray-500 hidden sm:inline">Period start <span class="font-medium text-gray-700">${fmt(first)}</span></span>
+    <span class="text-gray-300 hidden sm:inline">·</span>
+    <span class="text-gray-500 hidden sm:inline">Change <span class="font-semibold ${deltaColor}">${sign}${fmt(delta)}${pctStr}</span></span>
+    <span class="text-gray-300 hidden sm:inline">·</span>
+    <span class="text-gray-400 text-xs hidden sm:inline">${raw.labels[0]} – ${raw.labels[vals.length - 1]}</span>
+  `;
+
   new Chart(document.getElementById('netWorthChart'), {
     type: 'line',
     data: {

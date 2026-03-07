@@ -60,6 +60,27 @@
 </form>
 
 {% if transactions %}
+{% set ns = namespace(spent=0.0, income=0.0) %}
+{% for txn in transactions %}
+  {% if txn.amount < 0 %}{% set ns.spent = ns.spent + txn.amount %}{% endif %}
+  {% if txn.amount > 0 %}{% set ns.income = ns.income + txn.amount %}{% endif %}
+{% endfor %}
+<div class="bg-white border border-gray-200 rounded-lg shadow-sm px-5 py-3 mb-3 flex flex-wrap gap-x-6 gap-y-1 items-center text-sm">
+  <span class="text-gray-500">{{ transactions | length }} transaction{{ 's' if transactions | length != 1 else '' }}</span>
+  {% if ns.spent != 0 %}
+  <span class="text-gray-300 hidden sm:inline">·</span>
+  <span class="text-gray-500 hidden sm:inline">Spent <span class="font-semibold text-red-600">${{ "{:,.2f}".format(ns.spent | abs) }}</span></span>
+  {% endif %}
+  {% if ns.income != 0 %}
+  <span class="text-gray-300 hidden sm:inline">·</span>
+  <span class="text-gray-500 hidden sm:inline">Income <span class="font-semibold text-green-600">${{ "{:,.2f}".format(ns.income) }}</span></span>
+  {% endif %}
+  {% if ns.spent != 0 or ns.income != 0 %}
+  {% set net = ns.income + ns.spent %}
+  <span class="text-gray-300 hidden sm:inline">·</span>
+  <span class="text-gray-500 hidden sm:inline">Net <span class="font-semibold {% if net >= 0 %}text-green-600{% else %}text-red-600{% endif %}">{% if net < 0 %}-{% endif %}${{ "{:,.2f}".format(net | abs) }}</span></span>
+  {% endif %}
+</div>
 <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
   <table class="w-full text-sm">
     <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
@@ -109,7 +130,7 @@
         <td class="px-4 py-2">{{ category_badge(txn.category) }}</td>
         <td class="px-4 py-2 text-gray-600 hidden md:table-cell">{{ txn.account_name or '—' }}</td>
         <td class="px-4 py-2 text-right font-medium {% if txn.amount < 0 %}text-red-600{% else %}text-green-600{% endif %}">
-          {% if txn.amount < 0 %}-{% endif %}${{ "%.2f"|format(txn.amount | abs) }}
+          {% if txn.amount < 0 %}-{% endif %}${{ "{:,.2f}".format(txn.amount | abs) }}
         </td>
       </tr>
       {% endfor %}

@@ -1,4 +1,4 @@
-# Exploration: Mobile UX — Transactions, Accounts, Review Queue
+# Exploration: Increase Information Display Richness and Density
 
 ## Project Context
 
@@ -8,52 +8,86 @@ recurring charges, and provides a web dashboard.
 
 ### Current State of Focus Area
 
-**finance/web/templates/transactions.html** — Transaction list with a multi-input
-filter form (month nav, start/end dates, search, category, limit) using `flex flex-wrap`.
-The data table has 6 columns (Date, Description, Merchant, Category, Account, Amount)
-wrapped in `overflow-x-auto`. On mobile this forces horizontal scrolling — key columns
-like Merchant and Account could be hidden on small screens via `hidden sm:table-cell`.
+**finance/web/templates/base.html**
+Shared layout shell. Tailwind CSS via CDN, Chart.js via CDN. Navigation bar
+with links to all pages. Mobile hamburger menu. Flash message display. Content
+area is a `max-w-7xl mx-auto px-4 py-6` main element. No data-carrying logic.
 
-**finance/web/templates/accounts.html** — Accounts list with a bar chart (Transaction
-Volume, last 13 months) and an 8-column table: Account Name, Institution, Type, Balance,
-Txns, Date Range, Last Synced, Actions. Has `overflow-x-auto` but 8 columns is far too
-wide for mobile. Institution, Date Range, and Last Synced are good candidates to hide
-on small screens.
+**finance/web/templates/index.html**
+Dashboard home. Shows: Net Worth summary cards (total, assets, liabilities),
+Spending This Month table + doughnut chart by category, Credit Utilization
+table per card with utilization %, and Recent Pipeline Runs table (status,
+type, started, duration). Pipeline run timestamps are raw epoch ms integers,
+not human-readable. Spending table has no category color badges. Utilization
+has no progress bar visualization. Layout feels spacious with limited data
+density.
 
-**finance/web/templates/review.html** — Review queue table with 7 columns: Date, Amount,
-Description, Merchant, Category (inline select dropdown), Reason, Action (Approve button).
-The form spans multiple columns (Category + Action). On mobile this is nearly unusable.
-Should be refactored to a stacked card layout on small screens.
+**finance/web/templates/transactions.html**
+Full transaction list with filter form (date range, month navigation, search,
+category, limit). Table: Date, Description (hidden sm:), Merchant (hidden md:),
+Category (badge), Account (hidden md:), Amount. Pending indicator is a small
+dot. Showing count at bottom is plain text. No running total or summary strip.
+No inline amount formatting with thousands separator. Category column always
+shows a badge but table has no visual grouping or totals.
 
-**finance/web/templates/recurring.html** — Recurring charges page with summary stat
-cards (3-col grid, already `grid-cols-1 sm:grid-cols-3`), a spend timeline chart, and
-multiple 8-column tables (Merchant, Interval, Typical, Times Seen, Total Spent, Next Due,
-Status, Cancel). The header has filter toggle pills that wrap via `flex flex-wrap`.
-Cancel column contains complex inline forms. Times Seen and Total Spent could be hidden
-on mobile.
+**finance/web/templates/accounts.html**
+Lists all accounts with a transaction volume timeline chart (bar, 13 months).
+Table: Account Name+mask, Institution (hidden sm:), Type (hidden sm:), Balance,
+Txns count (hidden sm:), Date Range (hidden lg:), Last Synced (relative time,
+hidden lg:), Actions. Global summary bar shows total accounts, transactions,
+date range. Balances don't use thousands separator on larger amounts (uses
+{:,.2f} but only when balance >= 0, negative branch lacks comma formatting).
 
-**finance/web/templates/index.html** — Dashboard with net worth cards (already responsive,
-`grid-cols-1 sm:grid-cols-3`), spending section (recently improved with `flex-col md:flex-row`
-stacking), credit utilization table (4 columns: Card, Balance, Limit, Utilization — manageable
-on mobile), and recent pipeline runs table (4 columns: Status, Type, Started, Duration —
-manageable but Started timestamp formatting could be improved for mobile).
+**finance/web/templates/spending.html**
+Spending breakdown page with date range filter, group-by (category/merchant/
+account), and financial activity toggle. Summary strip shows total spent,
+transaction count, group count, avg/day. Bar chart + table side by side.
+Table has % of total with a progress bar per row. Category rows link to
+filtered transaction view. Merchant rows link to search view.
 
-**finance/web/templates/base.html** — Navigation with hamburger menu for mobile (already
-implemented). Main content uses `max-w-7xl mx-auto px-4 py-6`.
+**finance/web/templates/recurring.html**
+Recurring charges page. Summary strip (monthly total, annual total, due-soon
+count). Spend timeline chart (13 months actual + 3 projected). Three sections:
+Needs Attention (past due / due any day / zombies), Active Subscriptions
+(grouped by cadence: monthly/annual/etc), Likely Cancelled (collapsed). Each
+row: Merchant (linked), Interval, Typical amount, Times Seen, Total Spent,
+Next Due, Status badge, Cancel tracking cell. Status badges are color-coded
+(red=past_due, blue=due_any_day, amber=due_soon, etc). Cancel tracking allows
+logging attempt date + notes.
 
-**finance/web/templates/_macros.html** — Jinja2 macros for `category_badge(cat)`.
+**finance/web/templates/review.html**
+Review queue for flagged transactions. Simple table: Date, Amount, Description
+(hidden md:), Merchant (hidden md:), Category (inline select), Review Reason
+(hidden sm:), Approve button. Shows count at top and bottom. No grouping by
+reason or category. No visual priority indicators.
+
+**finance/web/templates/net_worth.html**
+Just a Chart.js line chart of net worth over time. No summary stats, no
+annotations, no delta indicators, no current value callout outside the chart.
+
+**finance/web/templates/pipeline.html**
+Shows current pipeline state (total txns, uncategorized count, recurring
+count, needs review count) plus category breakdown table. Run Pipeline button
+with streaming log output panel. Recent run history table. No cost information
+displayed on recent runs, no trend indicators on the state cards.
+
+**finance/web/templates/_macros.html**
+`category_badge(cat)` macro — renders colored pill badges for each known
+category (Food & Dining, Groceries, Transportation, Shopping, Entertainment,
+Travel, Health & Fitness, Home & Utilities, Subscriptions & Software, Personal
+Care, Education, Financial, Income, Investment, Other). Falls back to gray.
+
+**finance/web/app.py**
+FastAPI routes serving all pages. Provides template context data. Route
+handlers compute net worth, credit utilization, spending summaries, account
+overviews, recurring charges, pipeline runs, etc.
 
 ## Objective
 
-Continue improving mobile UX and responsive design across the finance app. A previous
-exploration loop (explore/mobile-responsive-2026-03-06) already improved spending,
-recurring summary, report detail, and dashboard spending sections.
-
-This loop focuses on the remaining high-impact pages:
-- **Transactions** — hide less-critical columns on mobile, improve filter form layout
-- **Accounts** — hide secondary columns on mobile
-- **Review queue** — near-unusable on mobile; needs card layout or column hiding
-- **Recurring** — hide secondary columns on mobile if not already done
+Increase information display richness and density across the finance dashboard.
+Make every view show more useful context at a glance — better use of space,
+richer data in table rows, smarter summary lines, subtle inline indicators
+where data exists, and tighter visual layout without sacrificing readability.
 
 This is intentionally open-ended. Use your judgment about what "better" means.
 Focus on quality, clarity, correctness, and user experience — not quantity of changes.
@@ -61,7 +95,7 @@ Focus on quality, clarity, correctness, and user experience — not quantity of 
 ## Per-Iteration Protocol
 
 Before making any change:
-1. Run: `git log --oneline -8 -- finance/web/templates/`
+1. Run: `git log --oneline -8 -- finance/web/templates/ finance/web/app.py`
 2. Read the files most relevant to the next improvement
 3. Identify ONE specific, concrete improvement that has not already been made
 4. If you genuinely cannot identify a meaningful improvement, output the stop signal
@@ -72,7 +106,7 @@ Making the change:
 - Do not re-implement or undo something a previous iteration already did
 
 After the change:
-- Commit with: `explore(mobile-ux): <what changed and why in one line>`
+- Commit with: `explore(info-density): <what changed and why in one line>`
 
 ## Tool Reliability Note
 
@@ -84,24 +118,23 @@ dedicated tools when they load normally — they are safer and more precise.
 
 ## In Scope
 
+finance/web/templates/index.html
 finance/web/templates/transactions.html
 finance/web/templates/accounts.html
-finance/web/templates/review.html
 finance/web/templates/recurring.html
-finance/web/templates/index.html
-finance/web/templates/base.html
+finance/web/templates/spending.html
+finance/web/templates/review.html
+finance/web/templates/net_worth.html
+finance/web/templates/pipeline.html
 finance/web/templates/_macros.html
+finance/web/templates/base.html
+finance/web/app.py
 
 ## Do Not Touch
 
 finance/pipeline/
 finance/db/
-finance/web/app.py
-finance/web/templates/spending.html
-finance/web/templates/report_detail.html
-finance/web/templates/net_worth.html
-finance/web/templates/pipeline.html
-finance/web/templates/reports.html
+finance/models.py
 openspec/ (specs are written during archive, not during exploration)
 .claude/ (skill and config files)
 

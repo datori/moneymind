@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import category_badge %}
 {% block title %}Dashboard — Finance{% endblock %}
 
 {% block content %}
@@ -11,7 +12,7 @@
     <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
       <p class="text-sm text-gray-500 mb-1">Total Net Worth</p>
       <p class="text-3xl font-bold {% if net_worth.total >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
-        ${{ "%.2f"|format(net_worth.total) }}
+        {{ "-" if net_worth.total < 0 else "" }}${{ "{:,.2f}".format(net_worth.total | abs) }}
       </p>
       {% if net_worth.as_of %}
       <p class="text-xs text-gray-400 mt-1">as of {{ net_worth.as_of }}</p>
@@ -19,11 +20,11 @@
     </div>
     <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
       <p class="text-sm text-gray-500 mb-1">Assets</p>
-      <p class="text-2xl font-semibold text-green-600">${{ "%.2f"|format(net_worth.assets) }}</p>
+      <p class="text-2xl font-semibold text-green-600">${{ "{:,.2f}".format(net_worth.assets) }}</p>
     </div>
     <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
       <p class="text-sm text-gray-500 mb-1">Liabilities</p>
-      <p class="text-2xl font-semibold text-red-600">${{ "%.2f"|format(net_worth.liabilities) }}</p>
+      <p class="text-2xl font-semibold text-red-600">${{ "{:,.2f}".format(net_worth.liabilities) }}</p>
     </div>
   </div>
 </section>
@@ -48,7 +49,7 @@
         <tbody>
           {% for row in spending %}
           <tr class="border-t border-gray-100">
-            <td class="px-4 py-2">{{ row.label }}</td>
+            <td class="px-4 py-2">{{ category_badge(row.label) }}</td>
             <td class="px-4 py-2 text-right font-medium">${{ "%.2f"|format(row.total) }}</td>
             <td class="px-4 py-2 text-right text-gray-500">{{ row.count }}</td>
           </tr>
@@ -94,7 +95,7 @@
     <span class="font-semibold {% if utilization.aggregate_pct > 30 %}text-red-600{% elif utilization.aggregate_pct > 20 %}text-yellow-600{% else %}text-green-600{% endif %}">
       {{ "%.1f"|format(utilization.aggregate_pct) }}%
     </span>
-    (${{ "%.2f"|format(utilization.total_balance) }} / ${{ "%.2f"|format(utilization.total_limit) }})
+    (${{ "{:,.2f}".format(utilization.total_balance) }} / ${{ "{:,.2f}".format(utilization.total_limit) }})
   </p>
   {% endif %}
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
@@ -111,15 +112,21 @@
         {% for card in utilization.cards %}
         <tr class="border-t border-gray-100">
           <td class="px-4 py-2">{{ card.name }}</td>
-          <td class="px-4 py-2 text-right">${{ "%.2f"|format(card.balance | abs) }}</td>
+          <td class="px-4 py-2 text-right">${{ "{:,.2f}".format(card.balance | abs) }}</td>
           <td class="px-4 py-2 text-right">
-            {% if card.limit is not none %}${{ "%.2f"|format(card.limit) }}{% else %}<span class="text-gray-400">—</span>{% endif %}
+            {% if card.limit is not none %}${{ "{:,.2f}".format(card.limit) }}{% else %}<span class="text-gray-400">—</span>{% endif %}
           </td>
           <td class="px-4 py-2 text-right">
             {% if card.utilization_pct is not none %}
-            <span class="{% if card.utilization_pct > 30 %}text-red-600{% elif card.utilization_pct > 20 %}text-yellow-600{% else %}text-green-600{% endif %} font-medium">
-              {{ "%.1f"|format(card.utilization_pct) }}%
-            </span>
+            <div class="flex flex-col items-end gap-1">
+              <span class="{% if card.utilization_pct > 30 %}text-red-600{% elif card.utilization_pct > 20 %}text-yellow-600{% else %}text-green-600{% endif %} font-medium">
+                {{ "%.1f"|format(card.utilization_pct) }}%
+              </span>
+              <div class="w-20 bg-gray-100 rounded-full h-1.5">
+                <div class="h-1.5 rounded-full {% if card.utilization_pct > 30 %}bg-red-500{% elif card.utilization_pct > 20 %}bg-yellow-400{% else %}bg-green-500{% endif %}"
+                     style="width: {{ [card.utilization_pct, 100] | min | int }}%"></div>
+              </div>
+            </div>
             {% else %}
             <span class="text-gray-400">—</span>
             {% endif %}
@@ -168,7 +175,7 @@
           <td class="px-4 py-2 text-gray-600">{{ run.run_type }}</td>
           <td class="px-4 py-2 text-gray-600 text-xs">
             {% if run.started_at %}
-              {{ (run.started_at / 1000) | int | string }}
+              <span class="js-rel-time" data-ts="{{ run.started_at }}" title="{{ run.started_at }}">{{ run.started_at }}</span>
             {% else %}
               —
             {% endif %}
@@ -192,4 +199,18 @@
     {% endif %}
   </div>
 </section>
+
+<script>
+document.querySelectorAll('.js-rel-time').forEach(el => {
+  const ts = parseInt(el.dataset.ts);
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) el.textContent = days + 'd ago';
+  else if (hours > 0) el.textContent = hours + 'h ago';
+  else if (mins > 0) el.textContent = mins + 'm ago';
+  else el.textContent = 'just now';
+});
+</script>
 {% endblock %}

@@ -12,7 +12,7 @@
     <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
       <p class="text-sm text-gray-500 mb-1">Total Net Worth</p>
       <p class="text-3xl font-bold {% if net_worth.total >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
-        ${{ "%.2f"|format(net_worth.total) }}
+        {{ "-" if net_worth.total < 0 else "" }}${{ "{:,.2f}".format(net_worth.total | abs) }}
       </p>
       {% if net_worth.as_of %}
       <p class="text-xs text-gray-400 mt-1">as of {{ net_worth.as_of }}</p>
@@ -20,11 +20,11 @@
     </div>
     <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
       <p class="text-sm text-gray-500 mb-1">Assets</p>
-      <p class="text-2xl font-semibold text-green-600">${{ "%.2f"|format(net_worth.assets) }}</p>
+      <p class="text-2xl font-semibold text-green-600">${{ "{:,.2f}".format(net_worth.assets) }}</p>
     </div>
     <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
       <p class="text-sm text-gray-500 mb-1">Liabilities</p>
-      <p class="text-2xl font-semibold text-red-600">${{ "%.2f"|format(net_worth.liabilities) }}</p>
+      <p class="text-2xl font-semibold text-red-600">${{ "{:,.2f}".format(net_worth.liabilities) }}</p>
     </div>
   </div>
 </section>
@@ -95,7 +95,7 @@
     <span class="font-semibold {% if utilization.aggregate_pct > 30 %}text-red-600{% elif utilization.aggregate_pct > 20 %}text-yellow-600{% else %}text-green-600{% endif %}">
       {{ "%.1f"|format(utilization.aggregate_pct) }}%
     </span>
-    (${{ "%.2f"|format(utilization.total_balance) }} / ${{ "%.2f"|format(utilization.total_limit) }})
+    (${{ "{:,.2f}".format(utilization.total_balance) }} / ${{ "{:,.2f}".format(utilization.total_limit) }})
   </p>
   {% endif %}
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
@@ -112,9 +112,9 @@
         {% for card in utilization.cards %}
         <tr class="border-t border-gray-100">
           <td class="px-4 py-2">{{ card.name }}</td>
-          <td class="px-4 py-2 text-right">${{ "%.2f"|format(card.balance | abs) }}</td>
+          <td class="px-4 py-2 text-right">${{ "{:,.2f}".format(card.balance | abs) }}</td>
           <td class="px-4 py-2 text-right">
-            {% if card.limit is not none %}${{ "%.2f"|format(card.limit) }}{% else %}<span class="text-gray-400">—</span>{% endif %}
+            {% if card.limit is not none %}${{ "{:,.2f}".format(card.limit) }}{% else %}<span class="text-gray-400">—</span>{% endif %}
           </td>
           <td class="px-4 py-2 text-right">
             {% if card.utilization_pct is not none %}

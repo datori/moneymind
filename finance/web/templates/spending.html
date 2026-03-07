@@ -82,11 +82,13 @@
         <tr>
           <th class="px-4 py-3 text-left">{{ group_by | capitalize }}</th>
           <th class="px-4 py-3 text-right">Amount</th>
-          <th class="px-4 py-3 text-right">Transactions</th>
+          <th class="px-4 py-3 text-right">Txns</th>
+          <th class="px-4 py-3 text-right">% of Total</th>
         </tr>
       </thead>
       <tbody>
         {% for row in spending %}
+        {% set pct = (row.total / total_spent * 100) if total_spent else 0 %}
         <tr class="border-t border-gray-100 hover:bg-gray-50">
           <td class="px-4 py-2">
             {% if group_by == 'category' %}
@@ -101,6 +103,14 @@
           </td>
           <td class="px-4 py-2 text-right font-medium">${{ "%.2f"|format(row.total) }}</td>
           <td class="px-4 py-2 text-right text-gray-500">{{ row.count }}</td>
+          <td class="px-4 py-2">
+            <div class="flex items-center gap-2 justify-end">
+              <span class="text-gray-500 text-xs w-10 text-right">{{ "%.1f"|format(pct) }}%</span>
+              <div class="w-20 bg-gray-100 rounded-full h-1.5">
+                <div class="bg-indigo-400 h-1.5 rounded-full" style="width: {{ "%.1f"|format(pct) }}%"></div>
+              </div>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>

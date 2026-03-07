@@ -16,10 +16,10 @@
       <tr>
         <th class="px-4 py-3 text-left">Date</th>
         <th class="px-4 py-3 text-right">Amount</th>
-        <th class="px-4 py-3 text-left">Description</th>
-        <th class="px-4 py-3 text-left">Merchant</th>
+        <th class="px-4 py-3 text-left hidden md:table-cell">Description</th>
+        <th class="px-4 py-3 text-left hidden md:table-cell">Merchant</th>
         <th class="px-4 py-3 text-left">Category</th>
-        <th class="px-4 py-3 text-left">Reason</th>
+        <th class="px-4 py-3 text-left hidden sm:table-cell">Reason</th>
         <th class="px-4 py-3 text-center">Action</th>
       </tr>
     </thead>
@@ -32,8 +32,8 @@
             {% if txn.amount < 0 %}-{% endif %}${{ "%.2f"|format(txn.amount | abs) }}
           {% else %}—{% endif %}
         </td>
-        <td class="px-4 py-2 max-w-xs truncate" title="{{ txn.description or '' }}">{{ txn.description or '—' }}</td>
-        <td class="px-4 py-2 text-gray-600">{{ txn.merchant_normalized or txn.merchant_name or '—' }}</td>
+        <td class="px-4 py-2 max-w-xs truncate hidden md:table-cell" title="{{ txn.description or '' }}">{{ txn.description or '—' }}</td>
+        <td class="px-4 py-2 text-gray-600 hidden md:table-cell">{{ txn.merchant_normalized or txn.merchant_name or '—' }}</td>
         <td class="px-4 py-2">
           <form method="post" action="/review/{{ txn.id }}/approve" class="flex items-center gap-2">
             <select name="category"
@@ -43,7 +43,7 @@
               {% endfor %}
             </select>
         </td>
-        <td class="px-4 py-2 text-xs text-gray-500 max-w-xs truncate" title="{{ txn.review_reason or '' }}">
+        <td class="px-4 py-2 text-xs text-gray-500 max-w-xs truncate hidden sm:table-cell" title="{{ txn.review_reason or '' }}">
           {{ txn.review_reason or '—' }}
         </td>
         <td class="px-4 py-2 text-center">

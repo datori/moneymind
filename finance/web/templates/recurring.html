@@ -2,9 +2,9 @@
 {% block title %}Recurring Charges — Finance{% endblock %}
 
 {% block content %}
-<div class="flex items-center justify-between mb-4">
+<div class="flex flex-wrap items-center gap-3 mb-4">
   <h1 class="text-2xl font-bold">Recurring Charges</h1>
-  <div class="flex items-center gap-2">
+  <div class="flex flex-wrap items-center gap-2 ml-auto">
     <a href="/recurring?include_housing={{ '0' if include_housing else '1' }}&include_education={{ '1' if include_education else '0' }}&include_health={{ '1' if include_health else '0' }}"
        class="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors
               {% if include_housing %}bg-indigo-50 border-indigo-200 text-indigo-600 hover:bg-indigo-100{% else %}bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100{% endif %}">
@@ -33,7 +33,7 @@
 </div>
 
 {# --- Summary Strip --- #}
-<div class="grid grid-cols-3 gap-3 mb-5">
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-4 py-3">
     <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Monthly</p>
     <p class="text-xl font-bold text-gray-900">~${{ "%.0f"|format(summary_monthly_total) }}</p>

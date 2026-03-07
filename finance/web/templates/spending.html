@@ -30,7 +30,7 @@
   </div>
   <div>
     <label class="block text-xs text-gray-500 mb-1" for="group_by">Group by</label>
-    <select id="group_by" name="group_by"
+    <select id="group_by" name="group_by" onchange="this.form.submit()"
       class="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
       <option value="category" {% if group_by == 'category' %}selected{% endif %}>Category</option>
       <option value="merchant" {% if group_by == 'merchant' %}selected{% endif %}>Merchant</option>

@@ -357,6 +357,11 @@ async def spending_page(
     total_spent = round(sum(row["total"] for row in spending), 2)
     total_count = sum(row["count"] for row in spending)
 
+    start_date_obj = date.fromisoformat(start)
+    end_date_obj = date.fromisoformat(end)
+    days_in_range = max(1, (end_date_obj - start_date_obj).days + 1)
+    avg_per_day = round(total_spent / days_in_range, 2) if total_spent else 0.0
+
     return templates.TemplateResponse(
         "spending.html",
         {
@@ -369,6 +374,7 @@ async def spending_page(
             "chart_data_json": chart_data_json,
             "total_spent": total_spent,
             "total_count": total_count,
+            "avg_per_day": avg_per_day,
         },
     )
 

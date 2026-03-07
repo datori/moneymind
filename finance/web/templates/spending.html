@@ -170,7 +170,20 @@
       scales: {
         x: { ticks: { font: { size: 11 } } },
         y: { ticks: { font: { size: 11 } } }
-      }
+      },
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        const label = encodeURIComponent(raw.labels[elements[0].index]);
+        const start = '{{ start }}', end = '{{ end }}', groupBy = '{{ group_by }}';
+        if (groupBy === 'category') {
+          window.location.href = `/transactions?start=${start}&end=${end}&category=${label}&sort_by=amount&sort_dir=desc`;
+        } else if (groupBy === 'merchant') {
+          window.location.href = `/transactions?start=${start}&end=${end}&search=${label}&sort_by=amount&sort_dir=desc`;
+        }
+      },
+      onHover: (evt, elements) => {
+        evt.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+      },
     }
   });
 })();

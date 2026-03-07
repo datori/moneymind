@@ -36,14 +36,14 @@
 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-4 py-3">
     <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Monthly</p>
-    <p class="text-xl font-bold text-gray-900">~${{ "%.0f"|format(summary_monthly_total) }}</p>
+    <p class="text-xl font-bold text-gray-900">~${{ "{:,.0f}".format(summary_monthly_total) }}</p>
     {% if pending_cancel_count > 0 %}
-    <p class="text-xs text-gray-400 mt-0.5">→ ~${{ "%.0f"|format(post_cancel_monthly) }} if {{ pending_cancel_count }} cancel(s) work</p>
+    <p class="text-xs text-gray-400 mt-0.5">→ ~${{ "{:,.0f}".format(post_cancel_monthly) }} if {{ pending_cancel_count }} cancel(s) work</p>
     {% endif %}
   </div>
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-4 py-3">
     <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Annual</p>
-    <p class="text-xl font-bold text-gray-900">~${{ "%.0f"|format(summary_annual_total) }}</p>
+    <p class="text-xl font-bold text-gray-900">~${{ "{:,.0f}".format(summary_annual_total) }}</p>
   </div>
   <div class="bg-white rounded-lg border border-gray-200 shadow-sm px-4 py-3 {% if summary_due_soon_count > 0 %}border-amber-200{% endif %}">
     <p class="text-xs {% if summary_due_soon_count > 0 %}text-amber-600{% else %}text-gray-500{% endif %} uppercase tracking-wide font-medium mb-1">Due Soon</p>
@@ -57,7 +57,7 @@
     <h2 class="text-sm font-semibold text-gray-700">Monthly Recurring Spend</h2>
     <span class="text-gray-300 text-xs">last 13 months + 3 projected</span>
     {% if chart_projected_total > 0 %}
-    <span class="ml-auto text-xs font-medium text-indigo-500 bg-indigo-50 border border-indigo-100 rounded px-2 py-0.5">~${{ "%.0f"|format(chart_projected_total) }} next month</span>
+    <span class="ml-auto text-xs font-medium text-indigo-500 bg-indigo-50 border border-indigo-100 rounded px-2 py-0.5">~${{ "{:,.0f}".format(chart_projected_total) }} next month</span>
     {% endif %}
   </div>
   {% if has_spend_data %}
@@ -227,9 +227,9 @@
                class="text-indigo-600 hover:underline">{{ item.merchant_normalized }}</a>
           </td>
           <td class="px-4 py-2 text-right text-gray-600 hidden sm:table-cell">{{ item.interval_label or '—' }}</td>
-          <td class="px-4 py-2 text-right font-medium text-gray-800">${{ "%.2f"|format(item.typical_amount) }}</td>
+          <td class="px-4 py-2 text-right font-medium text-gray-800">${{ "{:,.2f}".format(item.typical_amount) }}</td>
           <td class="px-4 py-2 text-right text-gray-500 hidden sm:table-cell">{{ item.count }}</td>
-          <td class="px-4 py-2 text-right text-gray-500 hidden sm:table-cell">${{ "%.0f"|format(item.total_spent) }}</td>
+          <td class="px-4 py-2 text-right text-gray-500 hidden sm:table-cell">${{ "{:,.0f}".format(item.total_spent) }}</td>
           <td class="px-4 py-2 text-right text-gray-600">{{ item.next_due_date or '—' }}</td>
           <td class="px-4 py-2">
             {% if is_zombie %}
@@ -260,7 +260,7 @@
     <div class="flex items-center gap-2 mb-1 px-1">
       <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ group.label }}</span>
       <span class="text-xs text-gray-300">·</span>
-      <span class="text-xs text-gray-400">~/mo: <span class="font-medium text-gray-600">${{ "%.2f"|format(group.subtotal_monthly) }}</span></span>
+      <span class="text-xs text-gray-400">~/mo: <span class="font-medium text-gray-600">${{ "{:,.2f}".format(group.subtotal_monthly) }}</span></span>
     </div>
     <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
       <table class="w-full text-sm">
@@ -274,9 +274,9 @@
                  class="text-indigo-600 hover:underline">{{ item.merchant_normalized }}</a>
             </td>
             <td class="px-4 py-2 text-right text-gray-600 hidden sm:table-cell">{{ item.interval_label or '—' }}</td>
-            <td class="px-4 py-2 text-right font-medium text-gray-800">${{ "%.2f"|format(item.typical_amount) }}</td>
+            <td class="px-4 py-2 text-right font-medium text-gray-800">${{ "{:,.2f}".format(item.typical_amount) }}</td>
             <td class="px-4 py-2 text-right text-gray-500 hidden sm:table-cell">{{ item.count }}</td>
-            <td class="px-4 py-2 text-right text-gray-500 hidden sm:table-cell">${{ "%.0f"|format(item.total_spent) }}</td>
+            <td class="px-4 py-2 text-right text-gray-500 hidden sm:table-cell">${{ "{:,.0f}".format(item.total_spent) }}</td>
             <td class="px-4 py-2 text-right text-gray-600">{{ item.next_due_date or '—' }}</td>
             <td class="px-4 py-2">{{ status_badge(item) }}</td>
             {{ cancel_cell(item, 's-' ~ ns.sidx) }}
@@ -287,7 +287,7 @@
         <tfoot>
           <tr class="border-t border-gray-200 bg-gray-50">
             <td colspan="2" class="px-4 py-2 text-xs text-gray-400 text-right">{{ group.label }} subtotal</td>
-            <td class="px-4 py-2 text-right text-xs font-semibold text-gray-600">~${{ "%.2f"|format(group.subtotal_monthly) }}/mo</td>
+            <td class="px-4 py-2 text-right text-xs font-semibold text-gray-600">~${{ "{:,.2f}".format(group.subtotal_monthly) }}/mo</td>
             <td colspan="5"></td>
           </tr>
         </tfoot>
@@ -321,9 +321,9 @@
                  class="text-gray-400 hover:underline">{{ item.merchant_normalized }}</a>
             </td>
             <td class="px-4 py-2 text-right hidden sm:table-cell">{{ item.interval_label or '—' }}</td>
-            <td class="px-4 py-2 text-right font-medium">${{ "%.2f"|format(item.typical_amount) }}</td>
+            <td class="px-4 py-2 text-right font-medium">${{ "{:,.2f}".format(item.typical_amount) }}</td>
             <td class="px-4 py-2 text-right hidden sm:table-cell">{{ item.count }}</td>
-            <td class="px-4 py-2 text-right hidden sm:table-cell">${{ "%.0f"|format(item.total_spent) }}</td>
+            <td class="px-4 py-2 text-right hidden sm:table-cell">${{ "{:,.0f}".format(item.total_spent) }}</td>
             <td class="px-4 py-2 text-right">{{ item.next_due_date or '—' }}</td>
             <td class="px-4 py-2">{{ status_badge(item) }}</td>
             {{ cancel_cell(item, 'c-' ~ loop.index) }}

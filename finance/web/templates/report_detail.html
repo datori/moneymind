@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ report.title }} — Finance{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <a href="/reports" class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mb-2">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+      All Reports
+    </a>
+    <h1 class="text-2xl font-bold">{{ report.title }}</h1>
+    <p class="text-sm text-gray-400 mt-1">
+      {{ report.month }}
+      {% if report.model_used %}
+        &middot; <span class="font-mono">{{ report.model_used }}</span>
+      {% endif %}
+      {% if report.tokens_in and report.tokens_out %}
+        &middot; {{ "{:,}".format(report.tokens_in) }} in / {{ "{:,}".format(report.tokens_out) }} out tokens
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+<!-- Narrative (rendered from Markdown) -->
+<div class="bg-white border border-gray-200 rounded-lg shadow-sm p-4 sm:p-8">
+  <div id="narrative" class="prose prose-gray max-w-none text-sm leading-relaxed"></div>
+</div>
+
+<!-- Raw narrative source (hidden, for JS to pick up) -->
+<script id="narrative-src" type="text/plain">{{ report.narrative_md | e }}</script>
+
+<!-- marked.js for MD rendering -->
+<script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+<script>
+  const src = document.getElementById('narrative-src').textContent;
+  const narrative = document.getElementById('narrative');
+  narrative.innerHTML = marked.parse(src);
+  // Wrap tables in a scrollable container so wide tables don't overflow on mobile
+  narrative.querySelectorAll('table').forEach(function(t) {
+    const wrap = document.createElement('div');
+    wrap.className = 'table-wrap';
+    t.parentNode.insertBefore(wrap, t);
+    wrap.appendChild(t);
+  });
+</script>
+
+<!-- Minimal prose styles (Tailwind CDN doesn't include @tailwindcss/typography) -->
+<style>
+  #narrative h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 0.75rem; }
+  #narrative h2 { font-size: 1.15rem; font-weight: 700; margin: 1.5rem 0 0.5rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.25rem; }
+  #narrative h3 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.4rem; }
+  #narrative p  { margin: 0.6rem 0; color: #374151; }
+  #narrative ul, #narrative ol { margin: 0.6rem 0 0.6rem 1.25rem; }
+  #narrative li { margin: 0.3rem 0; color: #374151; }
+  #narrative ul { list-style-type: disc; }
+  #narrative ol { list-style-type: decimal; }
+  #narrative strong { font-weight: 600; color: #111827; }
+  #narrative code { background: #f3f4f6; border-radius: 3px; padding: 0.1em 0.35em; font-size: 0.85em; font-family: ui-monospace, monospace; }
+  #narrative .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 1rem 0; }
+  #narrative table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  #narrative th { background: #f9fafb; font-weight: 600; text-align: left; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; }
+  #narrative td { padding: 0.45rem 0.75rem; border: 1px solid #e5e7eb; }
+  #narrative tr:nth-child(even) td { background: #fafafa; }
+  #narrative blockquote { border-left: 3px solid #6366f1; padding-left: 1rem; color: #6b7280; margin: 1rem 0; }
+</style>
+{% endblock %}

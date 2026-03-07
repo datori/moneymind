@@ -49,12 +49,12 @@
     <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
       <tr>
         <th class="px-4 py-3 text-left">Account Name</th>
-        <th class="px-4 py-3 text-left">Institution</th>
-        <th class="px-4 py-3 text-left">Type</th>
+        <th class="px-4 py-3 text-left hidden sm:table-cell">Institution</th>
+        <th class="px-4 py-3 text-left hidden sm:table-cell">Type</th>
         <th class="px-4 py-3 text-right">Balance</th>
-        <th class="px-4 py-3 text-right">Txns</th>
-        <th class="px-4 py-3 text-left">Date Range</th>
-        <th class="px-4 py-3 text-left">Last Synced</th>
+        <th class="px-4 py-3 text-right hidden sm:table-cell">Txns</th>
+        <th class="px-4 py-3 text-left hidden lg:table-cell">Date Range</th>
+        <th class="px-4 py-3 text-left hidden lg:table-cell">Last Synced</th>
         <th class="px-4 py-3 text-left">Actions</th>
       </tr>
     </thead>
@@ -64,8 +64,8 @@
         <td class="px-4 py-3 font-medium">
           {{ acct.name }}{% if acct.mask %}<span class="text-gray-400 font-normal text-xs ml-1">···{{ acct.mask }}</span>{% endif %}
         </td>
-        <td class="px-4 py-3 text-gray-600">{{ acct.institution or '—' }}</td>
-        <td class="px-4 py-3 capitalize text-gray-600">{{ acct.type or '—' }}</td>
+        <td class="px-4 py-3 text-gray-600 hidden sm:table-cell">{{ acct.institution or '—' }}</td>
+        <td class="px-4 py-3 capitalize text-gray-600 hidden sm:table-cell">{{ acct.type or '—' }}</td>
         <td class="px-4 py-3 text-right tabular-nums {% if acct.balance is not none and acct.balance < 0 %}text-red-600{% endif %}">
           {% if acct.balance is not none %}
             ${{ "{:,.2f}".format(acct.balance | abs) if acct.balance >= 0 else "-$" + "{:,.2f}".format(acct.balance | abs) }}
@@ -73,8 +73,8 @@
             <span class="text-gray-400">—</span>
           {% endif %}
         </td>
-        <td class="px-4 py-3 text-right tabular-nums text-gray-700">{{ acct.txn_count }}</td>
-        <td class="px-4 py-3 text-gray-600 text-xs">
+        <td class="px-4 py-3 text-right tabular-nums text-gray-700 hidden sm:table-cell">{{ acct.txn_count }}</td>
+        <td class="px-4 py-3 text-gray-600 text-xs hidden lg:table-cell">
           {% if acct.earliest_txn and acct.latest_txn %}
             <span class="js-date-range"
                   data-earliest="{{ acct.earliest_txn }}"
@@ -85,7 +85,7 @@
             <span class="text-gray-400">—</span>
           {% endif %}
         </td>
-        <td class="px-4 py-3 text-gray-500 text-xs">
+        <td class="px-4 py-3 text-gray-500 text-xs hidden lg:table-cell">
           {% if acct.last_synced_at %}
             <span class="js-relative-time" data-ts="{{ acct.last_synced_at }}">{{ acct.last_synced_at }}</span>
           {% else %}

@@ -168,7 +168,7 @@
           <td class="px-4 py-2 text-gray-600">{{ run.run_type }}</td>
           <td class="px-4 py-2 text-gray-600 text-xs">
             {% if run.started_at %}
-              {{ (run.started_at / 1000) | int | string }}
+              <span class="js-rel-time" data-ts="{{ run.started_at }}" title="{{ run.started_at }}">{{ run.started_at }}</span>
             {% else %}
               —
             {% endif %}
@@ -192,4 +192,18 @@
     {% endif %}
   </div>
 </section>
+
+<script>
+document.querySelectorAll('.js-rel-time').forEach(el => {
+  const ts = parseInt(el.dataset.ts);
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) el.textContent = days + 'd ago';
+  else if (hours > 0) el.textContent = hours + 'h ago';
+  else if (mins > 0) el.textContent = mins + 'm ago';
+  else el.textContent = 'just now';
+});
+</script>
 {% endblock %}

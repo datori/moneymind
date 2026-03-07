@@ -248,7 +248,7 @@ All data tables in the dashboard SHALL be wrapped in an `overflow-x-auto` contai
 
 #### Scenario: Transaction table on mobile
 - **WHEN** the `/transactions` page is viewed on a viewport narrower than 768px
-- **THEN** the full 7-column table is accessible via horizontal scroll; no columns are hidden
+- **THEN** the full 6-column table (Date, Description, Merchant, Category, Account, Amount) is accessible via horizontal scroll; no columns are hidden
 
 #### Scenario: Pipeline run history table on mobile
 - **WHEN** the `/pipeline` page is viewed on a viewport narrower than 768px

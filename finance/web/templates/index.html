@@ -118,9 +118,15 @@
           </td>
           <td class="px-4 py-2 text-right">
             {% if card.utilization_pct is not none %}
-            <span class="{% if card.utilization_pct > 30 %}text-red-600{% elif card.utilization_pct > 20 %}text-yellow-600{% else %}text-green-600{% endif %} font-medium">
-              {{ "%.1f"|format(card.utilization_pct) }}%
-            </span>
+            <div class="flex flex-col items-end gap-1">
+              <span class="{% if card.utilization_pct > 30 %}text-red-600{% elif card.utilization_pct > 20 %}text-yellow-600{% else %}text-green-600{% endif %} font-medium">
+                {{ "%.1f"|format(card.utilization_pct) }}%
+              </span>
+              <div class="w-20 bg-gray-100 rounded-full h-1.5">
+                <div class="h-1.5 rounded-full {% if card.utilization_pct > 30 %}bg-red-500{% elif card.utilization_pct > 20 %}bg-yellow-400{% else %}bg-green-500{% endif %}"
+                     style="width: {{ [card.utilization_pct, 100] | min | int }}%"></div>
+              </div>
+            </div>
             {% else %}
             <span class="text-gray-400">—</span>
             {% endif %}

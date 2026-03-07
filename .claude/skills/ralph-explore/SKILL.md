@@ -210,7 +210,7 @@ Then use `sed` to replace the placeholders with actual values. Or write the file
 active: true
 iteration: 1
 session_id: {value of $CLAUDE_CODE_SESSION_ID, or empty}
-max_iterations: {confirmed max iterations, integer}
+max_iterations: {confirmed max iterations + 1, integer — the hook terminates at iteration >= max_iterations and starts at 1, so N desired iterations requires N+1 here}
 completion_promise: "EXPLORATION COMPLETE"
 started_at: "{ISO8601 UTC timestamp}"
 ---

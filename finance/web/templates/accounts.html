@@ -124,6 +124,9 @@
         <td class="px-4 py-3 text-right tabular-nums {% if acct.balance is not none and acct.balance < 0 %}text-red-600{% endif %}">
           {% if acct.balance is not none %}
             ${{ "{:,.2f}".format(acct.balance | abs) if acct.balance >= 0 else "-$" + "{:,.2f}".format(acct.balance | abs) }}
+            {% if acct.available is not none and acct.type == 'credit' %}
+            <div class="text-xs text-gray-400 font-normal">${{ "{:,.0f}".format(acct.available) }} avail</div>
+            {% endif %}
           {% else %}
             <span class="text-gray-400">—</span>
           {% endif %}

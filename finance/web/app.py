@@ -287,6 +287,28 @@ async def transactions_page(
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
+
+    # Daily spending chart: query all matching expense transactions (ignoring limit)
+    txn_chart_json = "null"
+    if start and end:
+        where = ["date >= ?", "date <= ?", "amount < 0"]
+        params: list = [start, end]
+        if category:
+            where.append("category = ?")
+            params.append(category)
+        if search:
+            where.append("(merchant_name LIKE ? OR description LIKE ?)")
+            params.extend([f"%{search}%", f"%{search}%"])
+        day_rows = conn.execute(
+            f"SELECT date, SUM(ABS(amount)) as total FROM transactions WHERE {' AND '.join(where)} GROUP BY date ORDER BY date",
+            params,
+        ).fetchall()
+        if day_rows:
+            txn_chart_json = json.dumps({
+                "labels": [r["date"] for r in day_rows],
+                "values": [round(r["total"], 2) for r in day_rows],
+            })
+
     return templates.TemplateResponse(
         "transactions.html",
         {
@@ -300,6 +322,7 @@ async def transactions_page(
             "search": search or "",
             "sort_by": sort_by,
             "sort_dir": sort_dir,
+            "txn_chart_json": txn_chart_json,
         },
     )
 
@@ -326,14 +349,25 @@ async def net_worth_page(
     running: dict[str, float] = {}
     chart_labels: list[str] = []
     chart_values: list[float] = []
+    chart_assets: list[float] = []
+    chart_liabilities: list[float] = []
 
     for day in sorted_days:
         running.update(day_balances[day])
         nw = sum(running.values())
+        assets = sum(v for v in running.values() if v > 0)
+        liabilities = abs(sum(v for v in running.values() if v < 0))
         chart_labels.append(day)
         chart_values.append(round(nw, 2))
+        chart_assets.append(round(assets, 2))
+        chart_liabilities.append(round(liabilities, 2))
 
-    chart_data_json = json.dumps({"labels": chart_labels, "values": chart_values})
+    chart_data_json = json.dumps({
+        "labels": chart_labels,
+        "values": chart_values,
+        "assets": chart_assets,
+        "liabilities": chart_liabilities,
+    })
 
     return templates.TemplateResponse(
         "net_worth.html",
@@ -370,7 +404,8 @@ async def spending_page(
 
     labels = [row["label"] for row in spending]
     values = [round(row["total"], 2) for row in spending]
-    chart_data_json = json.dumps({"labels": labels, "values": values})
+    counts = [row["count"] for row in spending]
+    chart_data_json = json.dumps({"labels": labels, "values": values, "counts": counts})
 
     total_spent = round(sum(row["total"] for row in spending), 2)
     total_count = sum(row["count"] for row in spending)

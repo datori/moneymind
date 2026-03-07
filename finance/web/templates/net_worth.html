@@ -41,26 +41,54 @@
     <span class="text-gray-400 text-xs hidden sm:inline">${raw.labels[0]} – ${raw.labels[vals.length - 1]}</span>
   `;
 
+  const sparse = raw.labels.length > 60;
   new Chart(document.getElementById('netWorthChart'), {
     type: 'line',
     data: {
       labels: raw.labels,
-      datasets: [{
-        label: 'Net Worth ($)',
-        data: raw.values,
-        borderColor: 'rgb(99, 102, 241)',
-        backgroundColor: 'rgba(99, 102, 241, 0.1)',
-        fill: true,
-        tension: 0.2,
-        pointRadius: raw.labels.length > 60 ? 0 : 3,
-        borderWidth: 2,
-      }]
+      datasets: [
+        {
+          label: 'Net Worth',
+          data: raw.values,
+          borderColor: 'rgb(99, 102, 241)',
+          backgroundColor: 'rgba(99, 102, 241, 0.08)',
+          fill: true,
+          tension: 0.2,
+          pointRadius: sparse ? 0 : 3,
+          borderWidth: 2,
+          order: 1,
+        },
+        ...(raw.assets ? [{
+          label: 'Assets',
+          data: raw.assets,
+          borderColor: 'rgb(16, 185, 129)',
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.2,
+          pointRadius: 0,
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          order: 2,
+        }] : []),
+        ...(raw.liabilities ? [{
+          label: 'Liabilities',
+          data: raw.liabilities,
+          borderColor: 'rgb(239, 68, 68)',
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.2,
+          pointRadius: 0,
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          order: 3,
+        }] : []),
+      ]
     },
     options: {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false },
+        legend: { display: true, position: 'top', labels: { font: { size: 11 }, boxWidth: 20 } },
         tooltip: {
           callbacks: {
             label: ctx => '$' + ctx.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2 })

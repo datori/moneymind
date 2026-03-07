@@ -19,6 +19,12 @@
   <span><span class="font-semibold text-gray-800">{{ g.total_transactions }}</span> transaction{{ 's' if g.total_transactions != 1 else '' }}</span>
   <span class="text-gray-300">·</span>
   <span>{{ g.earliest_transaction or '—' }} – {{ g.latest_transaction or '—' }}</span>
+  <span class="text-gray-300">·</span>
+  <span>Assets <span class="font-semibold text-emerald-700">${{ "{:,.0f}".format(total_assets) }}</span></span>
+  <span class="text-gray-300">·</span>
+  <span>Liabilities <span class="font-semibold text-red-600">${{ "{:,.0f}".format(total_liabilities) }}</span></span>
+  <span class="text-gray-300">·</span>
+  <span>Net <span class="font-semibold {% if net_worth >= 0 %}text-emerald-700{% else %}text-red-600{% endif %}">${{ "{:,.0f}".format(net_worth | abs) }}{% if net_worth < 0 %} deficit{% endif %}</span></span>
 </div>
 {% endif %}
 

@@ -34,9 +34,9 @@
   <p class="text-sm text-gray-400 mb-3">{{ spending_start }} to {{ spending_end }}</p>
 
   {% if spending %}
-  <div class="flex gap-6 flex-wrap">
+  <div class="flex flex-col md:flex-row gap-6">
     <!-- Table -->
-    <div class="flex-1 min-w-64 bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
+    <div class="w-full md:flex-1 bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
           <tr>

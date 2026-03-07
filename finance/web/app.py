@@ -326,14 +326,25 @@ async def net_worth_page(
     running: dict[str, float] = {}
     chart_labels: list[str] = []
     chart_values: list[float] = []
+    chart_assets: list[float] = []
+    chart_liabilities: list[float] = []
 
     for day in sorted_days:
         running.update(day_balances[day])
         nw = sum(running.values())
+        assets = sum(v for v in running.values() if v > 0)
+        liabilities = abs(sum(v for v in running.values() if v < 0))
         chart_labels.append(day)
         chart_values.append(round(nw, 2))
+        chart_assets.append(round(assets, 2))
+        chart_liabilities.append(round(liabilities, 2))
 
-    chart_data_json = json.dumps({"labels": chart_labels, "values": chart_values})
+    chart_data_json = json.dumps({
+        "labels": chart_labels,
+        "values": chart_values,
+        "assets": chart_assets,
+        "liabilities": chart_liabilities,
+    })
 
     return templates.TemplateResponse(
         "net_worth.html",

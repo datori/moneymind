@@ -190,6 +190,20 @@ async def accounts_page(
         sum(acct["counts"]) > 0 for acct in timeline["accounts"]
     )
 
+    credit_util = get_credit_utilization(conn)
+
+    # Compute balance summary: assets (positive balances), liabilities (negative)
+    asset_types = {"checking", "savings", "investment"}
+    total_assets = sum(
+        a["balance"] for a in merged_accounts
+        if a["balance"] is not None and a["balance"] > 0
+    )
+    total_liabilities = sum(
+        abs(a["balance"]) for a in merged_accounts
+        if a["balance"] is not None and a["balance"] < 0
+    )
+    net_worth = total_assets - total_liabilities
+
     return templates.TemplateResponse(
         "accounts.html",
         {
@@ -200,6 +214,10 @@ async def accounts_page(
             "chart_data_json": chart_data_json,
             "has_chart_data": has_chart_data,
             "selected_account_id": account_id,
+            "credit_util": credit_util,
+            "total_assets": total_assets,
+            "total_liabilities": total_liabilities,
+            "net_worth": net_worth,
         },
     )
 

@@ -74,10 +74,10 @@
 <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
   <tr>
     <th class="px-4 py-3 text-left">Merchant</th>
-    <th class="px-4 py-3 text-right">Interval</th>
+    <th class="px-4 py-3 text-right hidden sm:table-cell">Interval</th>
     <th class="px-4 py-3 text-right">Typical</th>
-    <th class="px-4 py-3 text-right">Times Seen</th>
-    <th class="px-4 py-3 text-right">Total Spent</th>
+    <th class="px-4 py-3 text-right hidden sm:table-cell">Times Seen</th>
+    <th class="px-4 py-3 text-right hidden sm:table-cell">Total Spent</th>
     <th class="px-4 py-3 text-right">Next Due</th>
     <th class="px-4 py-3 text-left">Status</th>
     <th class="px-4 py-3 text-right">Cancel</th>
@@ -226,10 +226,10 @@
             <a href="/transactions?search={{ item.merchant_normalized | urlencode }}&sort_by=amount&sort_dir=desc"
                class="text-indigo-600 hover:underline">{{ item.merchant_normalized }}</a>
           </td>
-          <td class="px-4 py-2 text-right text-gray-600">{{ item.interval_label or '—' }}</td>
+          <td class="px-4 py-2 text-right text-gray-600 hidden sm:table-cell">{{ item.interval_label or '—' }}</td>
           <td class="px-4 py-2 text-right font-medium text-gray-800">${{ "%.2f"|format(item.typical_amount) }}</td>
-          <td class="px-4 py-2 text-right text-gray-500">{{ item.count }}</td>
-          <td class="px-4 py-2 text-right text-gray-500">${{ "%.0f"|format(item.total_spent) }}</td>
+          <td class="px-4 py-2 text-right text-gray-500 hidden sm:table-cell">{{ item.count }}</td>
+          <td class="px-4 py-2 text-right text-gray-500 hidden sm:table-cell">${{ "%.0f"|format(item.total_spent) }}</td>
           <td class="px-4 py-2 text-right text-gray-600">{{ item.next_due_date or '—' }}</td>
           <td class="px-4 py-2">
             {% if is_zombie %}
@@ -273,10 +273,10 @@
               <a href="/transactions?search={{ item.merchant_normalized | urlencode }}&sort_by=amount&sort_dir=desc"
                  class="text-indigo-600 hover:underline">{{ item.merchant_normalized }}</a>
             </td>
-            <td class="px-4 py-2 text-right text-gray-600">{{ item.interval_label or '—' }}</td>
+            <td class="px-4 py-2 text-right text-gray-600 hidden sm:table-cell">{{ item.interval_label or '—' }}</td>
             <td class="px-4 py-2 text-right font-medium text-gray-800">${{ "%.2f"|format(item.typical_amount) }}</td>
-            <td class="px-4 py-2 text-right text-gray-500">{{ item.count }}</td>
-            <td class="px-4 py-2 text-right text-gray-500">${{ "%.0f"|format(item.total_spent) }}</td>
+            <td class="px-4 py-2 text-right text-gray-500 hidden sm:table-cell">{{ item.count }}</td>
+            <td class="px-4 py-2 text-right text-gray-500 hidden sm:table-cell">${{ "%.0f"|format(item.total_spent) }}</td>
             <td class="px-4 py-2 text-right text-gray-600">{{ item.next_due_date or '—' }}</td>
             <td class="px-4 py-2">{{ status_badge(item) }}</td>
             {{ cancel_cell(item, 's-' ~ ns.sidx) }}
@@ -320,10 +320,10 @@
               <a href="/transactions?search={{ item.merchant_normalized | urlencode }}&sort_by=amount&sort_dir=desc"
                  class="text-gray-400 hover:underline">{{ item.merchant_normalized }}</a>
             </td>
-            <td class="px-4 py-2 text-right">{{ item.interval_label or '—' }}</td>
+            <td class="px-4 py-2 text-right hidden sm:table-cell">{{ item.interval_label or '—' }}</td>
             <td class="px-4 py-2 text-right font-medium">${{ "%.2f"|format(item.typical_amount) }}</td>
-            <td class="px-4 py-2 text-right">{{ item.count }}</td>
-            <td class="px-4 py-2 text-right">${{ "%.0f"|format(item.total_spent) }}</td>
+            <td class="px-4 py-2 text-right hidden sm:table-cell">{{ item.count }}</td>
+            <td class="px-4 py-2 text-right hidden sm:table-cell">${{ "%.0f"|format(item.total_spent) }}</td>
             <td class="px-4 py-2 text-right">{{ item.next_due_date or '—' }}</td>
             <td class="px-4 py-2">{{ status_badge(item) }}</td>
             {{ cancel_cell(item, 'c-' ~ loop.index) }}

@@ -116,7 +116,7 @@
     </tbody>
   </table>
 </div>
-<p class="text-xs text-gray-400 mt-2">Showing {{ transactions | length }} transaction(s).</p>
+<p class="text-xs text-gray-400 mt-2">Showing {{ transactions | length }} {{ 'transaction' if transactions | length == 1 else 'transactions' }}.</p>
 {% else %}
 <p class="text-gray-500 text-sm">No transactions found for the selected range.</p>
 {% endif %}

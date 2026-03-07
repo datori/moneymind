@@ -1,49 +1,61 @@
-# Exploration: Transaction List UI
+# Exploration: Filter Bar UX — Transactions Page
 
 ## Project Context
 
 This is a personal finance application — Python/FastAPI/SQLite. It syncs
 transactions from SimpleFin and CSV imports, AI-categorizes them, tracks
-recurring charges, and provides a web dashboard built with Jinja2 templates
-and Tailwind CSS (loaded from CDN).
+recurring charges, and provides a web dashboard.
 
 ### Current State of Focus Area
 
-**finance/web/templates/transactions.html**
-Main transaction browser page. Contains:
-- Filter bar: month navigation buttons (prev/next with JS), start/end date
-  inputs, search text field, category dropdown, limit input, and a submit button
-- Sortable table: columns for Date, Description, Merchant, Category, Account,
-  Amount (right-aligned, color-coded red/green), Pending
-- Amount formatting: manual `{% if txn.amount < 0 %}-{% endif %}${{ "%.2f"|format(txn.amount | abs) }}`
-- Sort links in Date/Amount headers; sort direction arrows (down/up) for active column
-- Inline JS: month nav buttons update start/end inputs and auto-submit the form;
-  updateLabel() shows "Mar 2026" style label
-- Trailing count line: "Showing N transaction(s)."
+**`finance/web/templates/transactions.html`** — the full transactions page
+template. The filter bar (lines 9–59) is the primary focus area. It contains:
 
-**finance/web/templates/_macros.html**
-Single macro: `category_badge(cat)`. Long if/elif chain mapping category names
-to Tailwind colored pills (bg-*-100 text-*-700). Falls back to gray for unknown
-categories. Used in the transactions table and potentially elsewhere.
+- A "Month" navigation group: prev (‹) and next (›) buttons around a JS-driven
+  month label, which auto-submits to set start/end to the full calendar month.
+- Start date and End date inputs (type="date"), individually labeled.
+- A Search text input (placeholder: "merchant or description"), fixed width w-48.
+- A Category dropdown (All Categories + dynamic list from route context).
+- A Limit number input (min 1, max 1000), fixed width w-24.
+- Two hidden inputs preserving sort_by and sort_dir across filter submissions.
+- A Filter submit button (indigo, right-aligned in the flex row).
 
-**finance/web/templates/base.html**
-HTML shell + Tailwind CDN + Chart.js CDN. Navigation bar with desktop links
-and mobile hamburger menu. Flash message area (green/red). Main content block.
-Active link highlighting via request.url.path comparisons.
+The filter bar uses `flex flex-wrap gap-4 items-end` — controls wrap at
+narrow viewports but there is no responsive grouping or priority ordering.
+All controls share equal visual weight; the Limit field (a rarely-changed
+power-user option) sits at the same level as Search and Category.
+
+The count line at the bottom reads: "Showing N transaction(s)." using the
+awkward `(s)` pattern.
+
+The JS at the bottom (lines 123–170) drives the month navigation: it reads
+start/end date inputs, updates the month label text, and auto-submits the
+form when prev/next is clicked.
+
+No "Clear" or "Reset" button exists — resetting filters requires manually
+clearing each field.
 
 ## Objective
 
-Improve the transaction list UI — tighten up display, formatting, and UX.
-This is intentionally open-ended. Focus on quality, clarity, and user experience.
-Good candidates include: visual hierarchy, amount formatting readability,
-filter bar layout, table density, active sort indicator clarity, empty states,
-or any other meaningful polish.
+Improve the transactions filter bar layout, label clarity, and mobile
+usability. The bar uses a flat flex-wrap layout that can crowd or misalign
+on narrow viewports. Possible improvements include:
+
+- Grouping related controls (e.g., date range as a unit)
+- Responsive layout adjustments for narrow viewports
+- Visual de-emphasis of low-priority fields (Limit)
+- A clear/reset affordance
+- Fixing the awkward "transaction(s)" count phrasing
+- Any other UX refinements that reduce noise or improve clarity
+
+This is intentionally open-ended. Use your judgment about what "better" means.
+Focus on quality, clarity, correctness, and user experience — not quantity of changes.
 
 ## Per-Iteration Protocol
 
 Before making any change:
-1. Run: `git log --oneline -8 -- finance/web/templates/transactions.html finance/web/templates/_macros.html finance/web/templates/base.html`
-2. Read the files most relevant to the next improvement
+1. Run: `git log --oneline -8 -- finance/web/templates/transactions.html`
+2. Read the file most relevant to the next improvement
 3. Identify ONE specific, concrete improvement that has not already been made
 4. If you genuinely cannot identify a meaningful improvement, output the stop signal
 
@@ -53,19 +65,26 @@ Making the change:
 - Do not re-implement or undo something a previous iteration already did
 
 After the change:
-- Commit with: `explore(transaction-ui): <what changed and why in one line>`
+- Commit with: `explore(filter-bar-ux): <what changed and why in one line>`
+
+## Tool Reliability Note
+
+Deferred tools (Read, Edit, Grep) require a ToolSearch call to load before first
+use each iteration. If a ToolSearch call appears to hang (no response after ~20
+seconds), fall back to Bash equivalents: `cat` to read files, `python3 -c` or
+`sed` for edits. The Bash tool is always available without loading. Prefer the
+dedicated tools when they load normally — they are safer and more precise.
 
 ## In Scope
 
 finance/web/templates/transactions.html
-finance/web/templates/_macros.html
-finance/web/templates/base.html
 
 ## Do Not Touch
 
 finance/web/app.py
-finance/pipeline/
-finance/db/
+finance/web/templates/base.html
+finance/web/templates/_macros.html
+finance/analysis/
 openspec/ (specs are written during archive, not during exploration)
 .claude/ (skill and config files)
 

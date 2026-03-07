@@ -81,6 +81,51 @@
   <span class="text-gray-500 hidden sm:inline">Net <span class="font-semibold {% if net >= 0 %}text-green-600{% else %}text-red-600{% endif %}">{% if net < 0 %}-{% endif %}${{ "{:,.2f}".format(net | abs) }}</span></span>
   {% endif %}
 </div>
+{% if txn_chart_json and txn_chart_json != 'null' %}
+<div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4 mb-4">
+  <canvas id="txnDailyChart" height="80"></canvas>
+</div>
+<script>
+(function () {
+  const raw = {{ txn_chart_json | safe }};
+  new Chart(document.getElementById('txnDailyChart'), {
+    type: 'bar',
+    data: {
+      labels: raw.labels,
+      datasets: [{
+        label: 'Daily Spending ($)',
+        data: raw.values,
+        backgroundColor: 'rgba(99,102,241,0.55)',
+        borderColor: 'rgb(99,102,241)',
+        borderWidth: 1,
+        borderRadius: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => '$' + ctx.parsed.y.toLocaleString('en-US', { minimumFractionDigits: 2 })
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxTicksLimit: 14 } },
+        y: {
+          ticks: {
+            font: { size: 10 },
+            callback: v => '$' + v.toLocaleString('en-US', { notation: 'compact' })
+          }
+        }
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
+
 <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-x-auto">
   <table class="w-full text-sm">
     <thead class="bg-gray-50 text-gray-500 uppercase text-xs">

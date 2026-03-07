@@ -287,6 +287,28 @@ async def transactions_page(
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
+
+    # Daily spending chart: query all matching expense transactions (ignoring limit)
+    txn_chart_json = "null"
+    if start and end:
+        where = ["date >= ?", "date <= ?", "amount < 0"]
+        params: list = [start, end]
+        if category:
+            where.append("category = ?")
+            params.append(category)
+        if search:
+            where.append("(merchant_name LIKE ? OR description LIKE ?)")
+            params.extend([f"%{search}%", f"%{search}%"])
+        day_rows = conn.execute(
+            f"SELECT date, SUM(ABS(amount)) as total FROM transactions WHERE {' AND '.join(where)} GROUP BY date ORDER BY date",
+            params,
+        ).fetchall()
+        if day_rows:
+            txn_chart_json = json.dumps({
+                "labels": [r["date"] for r in day_rows],
+                "values": [round(r["total"], 2) for r in day_rows],
+            })
+
     return templates.TemplateResponse(
         "transactions.html",
         {
@@ -300,6 +322,7 @@ async def transactions_page(
             "search": search or "",
             "sort_by": sort_by,
             "sort_dir": sort_dir,
+            "txn_chart_json": txn_chart_json,
         },
     )
 

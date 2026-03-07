@@ -370,7 +370,8 @@ async def spending_page(
 
     labels = [row["label"] for row in spending]
     values = [round(row["total"], 2) for row in spending]
-    chart_data_json = json.dumps({"labels": labels, "values": values})
+    counts = [row["count"] for row in spending]
+    chart_data_json = json.dumps({"labels": labels, "values": values, "counts": counts})
 
     total_spent = round(sum(row["total"] for row in spending), 2)
     total_count = sum(row["count"] for row in spending)

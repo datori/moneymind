@@ -154,7 +154,16 @@
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => '$' + ctx.parsed[raw.labels.length > 8 ? 'x' : 'y'].toLocaleString('en-US', { minimumFractionDigits: 2 })
+            label: ctx => {
+              const axis = raw.labels.length > 8 ? 'x' : 'y';
+              const val = ctx.parsed[axis];
+              const total = {{ total_spent }};
+              const pct = total > 0 ? (val / total * 100).toFixed(1) : '0.0';
+              const count = raw.counts ? raw.counts[ctx.dataIndex] : null;
+              let text = '$' + val.toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' (' + pct + '%)';
+              if (count !== null) text += ' · ' + count + ' txn' + (count !== 1 ? 's' : '');
+              return text;
+            }
           }
         }
       },

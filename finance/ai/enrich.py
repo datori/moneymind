@@ -21,7 +21,7 @@ import anthropic
 from dotenv import load_dotenv
 
 # Import shared helpers from pipeline.py (these were moved there)
-from finance.ai.pipeline import _normalize_merchant_key, _build_clusters, _strip_fences
+from finance.ai.pipeline import _normalize_merchant_key, _build_clusters
 
 load_dotenv()
 
@@ -32,6 +32,41 @@ _MAX_TOKENS = 4096
 _CLUSTER_BATCH_SIZE = 40
 
 logger = logging.getLogger(__name__)
+
+ENRICH_MERCHANTS_TOOL = {
+    "name": "enrich_merchants",
+    "description": "Enrich merchant clusters with canonical names, recurring flags, and review flags",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "merchants": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "merchant_key": {"type": "string"},
+                        "canonical_name": {"type": "string"},
+                        "is_recurring": {"type": "integer", "enum": [0, 1]},
+                        "transactions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "needs_review": {"type": "integer", "enum": [0, 1]},
+                                    "review_reason": {"type": ["string", "null"]},
+                                },
+                                "required": ["id", "needs_review"],
+                            },
+                        },
+                    },
+                    "required": ["merchant_key", "canonical_name", "is_recurring", "transactions"],
+                },
+            }
+        },
+        "required": ["merchants"],
+    },
+}
 
 
 def _enrich_batch(clusters: list[dict]) -> list[dict]:
@@ -91,20 +126,12 @@ def _enrich_batch(clusters: list[dict]) -> list[dict]:
         model=_MODEL,
         max_tokens=_MAX_TOKENS,
         messages=[{"role": "user", "content": prompt}],
+        tools=[ENRICH_MERCHANTS_TOOL],
+        tool_choice={"type": "tool", "name": "enrich_merchants"},
     )
 
-    raw_text = message.content[0].text.strip()
-    raw_text = _strip_fences(raw_text)
-
-    try:
-        results = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Failed to parse enrichment response as JSON: {exc}\nRaw: {raw_text}"
-        ) from exc
-
-    if not isinstance(results, list):
-        raise ValueError(f"Expected a JSON array from enrichment, got: {type(results)}")
+    tool_block = next(b for b in message.content if b.type == "tool_use")
+    results = tool_block.input["merchants"]
 
     return results
 

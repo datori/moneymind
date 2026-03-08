@@ -23,6 +23,28 @@ _BATCH_SIZE = 25
 
 logger = logging.getLogger(__name__)
 
+CATEGORIZE_TRANSACTIONS_TOOL = {
+    "name": "categorize_transactions",
+    "description": "Assign a category to each transaction",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "transactions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "category": {"type": "string"},
+                    },
+                    "required": ["id", "category"],
+                },
+            }
+        },
+        "required": ["transactions"],
+    },
+}
+
 
 def categorize_batch(transactions: list[dict]) -> list[dict]:
     """Send up to 50 transactions to Claude and return categorized results.
@@ -66,30 +88,12 @@ def categorize_batch(transactions: list[dict]) -> list[dict]:
         model=_MODEL,
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
+        tools=[CATEGORIZE_TRANSACTIONS_TOOL],
+        tool_choice={"type": "tool", "name": "categorize_transactions"},
     )
 
-    raw_text = message.content[0].text.strip()
-
-    # Strip markdown code fences if present
-    if raw_text.startswith("```"):
-        lines = raw_text.splitlines()
-        # Drop first and last fence lines
-        inner = []
-        in_fence = False
-        for line in lines:
-            if line.startswith("```"):
-                in_fence = not in_fence
-                continue
-            inner.append(line)
-        raw_text = "\n".join(inner).strip()
-
-    try:
-        results = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Failed to parse categorization response as JSON: {exc}\nRaw: {raw_text}") from exc
-
-    if not isinstance(results, list):
-        raise ValueError(f"Expected a JSON array, got: {type(results)}")
+    tool_block = next(b for b in message.content if b.type == "tool_use")
+    results = tool_block.input["transactions"]
 
     # Validate and normalise category values (task 2.5)
     validated: list[dict] = []

@@ -85,6 +85,24 @@ def _normalize_merchant_key(
 # ---------------------------------------------------------------------------
 
 
+def _filter_clusters(clusters: list[dict], conn: sqlite3.Connection) -> list[dict]:
+    """Return only clusters that have at least one uncategorized transaction.
+
+    A cluster is skipped when every transaction in it already has
+    ``categorized_at IS NOT NULL``.  Used for incremental pipeline runs.
+    """
+    if not clusters:
+        return clusters
+    rows = conn.execute(
+        "SELECT id FROM transactions WHERE categorized_at IS NULL"
+    ).fetchall()
+    uncategorized_ids = {row["id"] for row in rows}
+    return [
+        c for c in clusters
+        if any(txn_id in uncategorized_ids for txn_id in c["transaction_ids"])
+    ]
+
+
 def _build_clusters(conn: sqlite3.Connection) -> list[dict]:
     """Group all transactions by normalized merchant key.
 
@@ -150,6 +168,37 @@ def _strip_fences(text: str) -> str:
             inner.append(line)
         return "\n".join(inner).strip()
     return text
+
+
+# ---------------------------------------------------------------------------
+# Tool schema for structured LLM output
+# ---------------------------------------------------------------------------
+
+CLASSIFY_MERCHANTS_TOOL = {
+    "name": "classify_merchants",
+    "description": "Classify merchant clusters with category, canonical name, recurring flag, and review flags",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "merchants": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "merchant_key": {"type": "string"},
+                        "category": {"type": "string"},
+                        "canonical_name": {"type": "string"},
+                        "is_recurring": {"type": "integer", "enum": [0, 1]},
+                        "review_ids": {"type": "array", "items": {"type": "string"}},
+                        "review_reason": {"type": ["string", "null"]},
+                    },
+                    "required": ["merchant_key", "category", "canonical_name", "is_recurring", "review_ids"],
+                },
+            }
+        },
+        "required": ["merchants"],
+    },
+}
 
 
 # ---------------------------------------------------------------------------
@@ -225,23 +274,15 @@ def _pipeline_batch(clusters: list[dict]) -> tuple[list[dict], int, int]:
         model=_MODEL,
         max_tokens=_MAX_TOKENS,
         messages=[{"role": "user", "content": prompt}],
+        tools=[CLASSIFY_MERCHANTS_TOOL],
+        tool_choice={"type": "tool", "name": "classify_merchants"},
     )
 
     tokens_in: int = message.usage.input_tokens
     tokens_out: int = message.usage.output_tokens
 
-    raw_text = message.content[0].text.strip()
-    raw_text = _strip_fences(raw_text)
-
-    try:
-        results = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Failed to parse pipeline response as JSON: {exc}\nRaw: {raw_text}"
-        ) from exc
-
-    if not isinstance(results, list):
-        raise ValueError(f"Expected a JSON array from pipeline batch, got: {type(results)}")
+    tool_block = next(b for b in message.content if b.type == "tool_use")
+    results = tool_block.input["merchants"]
 
     # Validate category values — fall back to "Other" for unrecognized values
     for item in results:
@@ -368,6 +409,7 @@ def run_pipeline(
     conn: sqlite3.Connection,
     emit=None,
     run_sync: bool = True,
+    full: bool = False,
 ) -> int:
     """Run the full enrichment pipeline and return the number of transactions written.
 
@@ -461,24 +503,37 @@ def run_pipeline(
         cluster_step_start = now_ms()
         _emit({"type": "step_start", "step": "cluster-build", "ts": cluster_step_start, "data": {}})
 
-        clusters = _build_clusters(conn)
-        cluster_count = len(clusters)
-        # Build lookup {merchant_key -> [transaction_ids]} for use in _apply_results
+        all_clusters = _build_clusters(conn)
+        clusters_total = len(all_clusters)
+        # Build lookup from ALL clusters so write-back covers every transaction ID
         cluster_lookup: dict[str, list[str]] = {
-            c["merchant_key"]: c["transaction_ids"] for c in clusters
+            c["merchant_key"]: c["transaction_ids"] for c in all_clusters
         }
 
-        # Count total transactions across clusters
-        transaction_count = sum(len(c["transaction_ids"]) for c in clusters)
+        # Count total transactions across all clusters
+        transaction_count = sum(len(c["transaction_ids"]) for c in all_clusters)
+
+        # Incremental filter: skip clusters where every transaction is already categorized
+        if full:
+            clusters = all_clusters
+            clusters_skipped = 0
+        else:
+            clusters = _filter_clusters(all_clusters, conn)
+            clusters_skipped = clusters_total - len(clusters)
+
+        cluster_count = len(clusters)
 
         cluster_step_end = now_ms()
         cluster_request_summary = json.dumps({
             "transaction_count": transaction_count,
-            "cluster_count": cluster_count,
+            "clusters_total": clusters_total,
+            "clusters_skipped": clusters_skipped,
         })
         cluster_response_summary = json.dumps({
             "transaction_count": transaction_count,
             "cluster_count": cluster_count,
+            "clusters_total": clusters_total,
+            "clusters_skipped": clusters_skipped,
         })
         conn.execute(
             """
@@ -494,18 +549,23 @@ def run_pipeline(
             "type": "step_done",
             "step": "cluster-build",
             "ts": cluster_step_end,
-            "data": {"cluster_count": cluster_count, "transaction_count": transaction_count},
+            "data": {
+                "cluster_count": cluster_count,
+                "transaction_count": transaction_count,
+                "clusters_skipped": clusters_skipped,
+            },
         })
 
         if not clusters:
-            logger.info("run_pipeline: no transactions found, nothing to do")
+            logger.info("run_pipeline: no clusters to process (total=%d, skipped=%d)", clusters_total, clusters_skipped)
             # Mark run as success
             run_end = now_ms()
             conn.execute(
                 "UPDATE run_log SET status = 'success', finished_at = ?, summary = ? WHERE id = ?",
                 (run_end, json.dumps({
                     "transactions_synced": new_transactions if run_sync else 0,
-                    "clusters_built": 0,
+                    "clusters_built": clusters_total,
+                    "clusters_skipped": clusters_skipped,
                     "batches_processed": 0,
                     "transactions_enriched": 0,
                     "categories": {},
@@ -737,7 +797,8 @@ def run_pipeline(
         ).fetchone()[0]
         run_summary = json.dumps({
             "transactions_synced": new_transactions if run_sync else 0,
-            "clusters_built": cluster_count,
+            "clusters_built": clusters_total,
+            "clusters_skipped": clusters_skipped,
             "batches_processed": run_batches_processed,
             "transactions_enriched": total_updated,
             "categories": run_categories,

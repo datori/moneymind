@@ -1,7 +1,6 @@
 """Sync orchestration: ties SimpleFIN client to DB upsert helpers."""
 
 import logging
-import os
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
@@ -119,15 +118,6 @@ def sync_all(conn: sqlite3.Connection) -> dict:
         accounts_updated += 1
 
     conn.commit()
-
-    # Auto-categorize new transactions if ANTHROPIC_API_KEY is available.
-    if os.getenv("ANTHROPIC_API_KEY"):
-        try:
-            from finance.ai.categorize import categorize_uncategorized
-
-            categorize_uncategorized(conn)
-        except Exception as exc:
-            logger.warning("Auto-categorization after sync failed (sync still succeeded): %s", exc)
 
     synced_at = datetime.fromtimestamp(now_s, tz=timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%SZ"

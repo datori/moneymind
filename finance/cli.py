@@ -64,9 +64,6 @@ def sync(ctx: click.Context) -> None:
 
 def _sync_run() -> None:
     """Core sync logic (shared by `finance sync` and `finance sync run`)."""
-    import logging
-    import os
-
     from finance.ingestion.sync import sync_all
 
     conn = _open_db()
@@ -85,15 +82,8 @@ def _sync_run() -> None:
         f"at {result['synced_at']}"
     )
 
-    # Pass 2: enrich transactions (non-fatal)
-    if os.getenv("ANTHROPIC_API_KEY"):
-        from finance.ai.enrich import enrich_transactions
-
-        try:
-            enriched = enrich_transactions(conn)
-            click.echo(f"Enrichment complete — {enriched} transaction(s) enriched.")
-        except Exception as exc:  # noqa: BLE001
-            logging.getLogger(__name__).warning("Enrichment failed (non-fatal): %s", exc)
+    if result['new_transactions'] > 0:
+        click.echo("Run `finance pipeline` to categorize new transactions.")
 
 
 @sync.command("run")
@@ -545,7 +535,14 @@ def import_csv_cmd(
     default=False,
     help="Skip SimpleFIN sync; only run the AI enrichment pass.",
 )
-def pipeline_cmd(enrich_only: bool) -> None:
+@click.option(
+    "--full",
+    "full",
+    is_flag=True,
+    default=False,
+    help="Re-process all clusters, including already-categorized transactions.",
+)
+def pipeline_cmd(enrich_only: bool, full: bool) -> None:
     """Run the AI enrichment pipeline (sync + categorize + enrich in one pass).
 
     Syncs latest transactions from SimpleFIN (unless --enrich-only), then runs
@@ -611,7 +608,7 @@ def pipeline_cmd(enrich_only: bool) -> None:
             click.echo(f"\nPipeline complete — {txn} transaction(s) updated in {dur_s:.1f}s")
 
     try:
-        total = run_pipeline(conn, emit=cli_emit, run_sync=not enrich_only)
+        total = run_pipeline(conn, emit=cli_emit, run_sync=not enrich_only, full=full)
     except Exception as exc:
         click.echo(f"Pipeline failed: {exc}", err=True)
         sys.exit(1)
@@ -643,8 +640,6 @@ def categorize(recategorize_all: bool) -> None:
         )
         sys.exit(1)
 
-    import logging
-
     from finance.ai.categorize import categorize_all, categorize_uncategorized
 
     conn = _open_db()
@@ -654,16 +649,6 @@ def categorize(recategorize_all: bool) -> None:
         count = categorize_uncategorized(conn)
 
     click.echo(f"Categorized {count} transaction(s).")
-
-    # Pass 2: enrich transactions (non-fatal)
-    if os.getenv("ANTHROPIC_API_KEY"):
-        from finance.ai.enrich import enrich_transactions
-
-        try:
-            enriched = enrich_transactions(conn)
-            click.echo(f"Enrichment complete — {enriched} transaction(s) enriched.")
-        except Exception as exc:  # noqa: BLE001
-            logging.getLogger(__name__).warning("Enrichment failed (non-fatal): %s", exc)
 
 
 # ---------------------------------------------------------------------------

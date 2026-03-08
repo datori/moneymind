@@ -10,7 +10,6 @@ from __future__ import annotations
 import csv
 import json
 import logging
-import os
 import sqlite3
 import uuid
 from dataclasses import dataclass, field
@@ -665,15 +664,6 @@ def import_csv(
                 rows_skipped += 1
 
     conn.commit()
-
-    # Auto-categorize new transactions if ANTHROPIC_API_KEY is available.
-    if os.getenv("ANTHROPIC_API_KEY"):
-        try:
-            from finance.ai.categorize import categorize_uncategorized
-
-            categorize_uncategorized(conn)
-        except Exception as exc:
-            logger.warning("Auto-categorization after CSV import failed (import still succeeded): %s", exc)
 
     return {
         "rows_read": rows_read,

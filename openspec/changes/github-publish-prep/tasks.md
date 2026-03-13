@@ -16,12 +16,12 @@
 - [x] 3.2 Create a backup of the current repo state: `cp -r . ../finance-backup-$(date +%Y%m%d)` (safety net)
 - [x] 3.3 Run `git filter-repo --path PROPOSAL.md --invert-paths` to remove `PROPOSAL.md` from all commits across all branches
 - [x] 3.4 Sanitize `openspec/changes/archive/2026-02-24-csv-import/proposal.md` in history: use `git filter-repo --blob-callback` (or manual sed callback) to replace `413` and `382` dollar-amount references with `XXX,XXX` in that specific file
-- [ ] 3.5 Run verification sweep against known sensitive patterns — confirm no matches
-- [ ] 3.6 Run verification: `git log --all --name-only --format="" | sort -u | grep "PROPOSAL.md"` — confirm no matches
+- [x] 3.5 Run verification sweep against known sensitive patterns — confirm no matches
+- [x] 3.6 Run verification: `git log --all --name-only --format="" | sort -u | grep "PROPOSAL.md"` — confirm no matches
 
 ## 4. Final verification and push
 
-- [ ] 4.1 Run `git log --oneline | head -10` to confirm history looks intact (92+ commits still present, just rewritten)
+- [x] 4.1 Run `git log --oneline | head -10` to confirm history looks intact (92+ commits still present, just rewritten)
 - [ ] 4.2 Review `git status` — confirm workspace is clean and all intended files are tracked
 - [ ] 4.3 Create new GitHub repository (public) — do NOT push to existing remote if one exists
 - [ ] 4.4 Push: `git remote add origin <new-repo-url> && git push -u origin --all`

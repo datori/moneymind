@@ -16,5 +16,13 @@ __pycache__/
 .venv/
 venv/
 
+# Personal / local data — never commit
+import/
+bugs/
+.ralph/
+.claude/worktrees/
+.claude/*.local.md
+
 # Misc
 .DS_Store
+*.swp

@@ -14,7 +14,13 @@ A local, self-hosted personal finance dashboard with AI-powered transaction cate
 
 ## Screenshots
 
-> Dashboard views: spending overview, transactions, net worth, recurring charges, accounts.
+| Spending | Transactions |
+|----------|--------------|
+| ![Spending breakdown](screenshots/spending-demo.png) | ![Transaction browser](screenshots/transactions-demo.png) |
+
+| Recurring charges | Accounts |
+|-------------------|----------|
+| ![Recurring charges](screenshots/recurring-demo.png) | ![Account overview](screenshots/accounts-demo.png) |
 
 ## Prerequisites
 

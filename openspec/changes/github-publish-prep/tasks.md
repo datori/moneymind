@@ -22,7 +22,7 @@
 ## 4. Final verification and push
 
 - [x] 4.1 Run `git log --oneline | head -10` to confirm history looks intact (92+ commits still present, just rewritten)
-- [ ] 4.2 Review `git status` — confirm workspace is clean and all intended files are tracked
+- [x] 4.2 Review `git status` — confirm workspace is clean and all intended files are tracked
 - [ ] 4.3 Create new GitHub repository (public) — do NOT push to existing remote if one exists
 - [ ] 4.4 Push: `git remote add origin <new-repo-url> && git push -u origin --all`
 - [ ] 4.5 Verify on GitHub: check that `PROPOSAL.md` does not appear in any commit, README renders on homepage, LICENSE is detected

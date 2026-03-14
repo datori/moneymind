@@ -1,6 +1,8 @@
-# Financial data — never commit
-data/
+# Financial data — never commit (demo.db is the exception)
+data/*
+!data/demo.db
 *.db
+!data/demo.db
 *.duckdb
 *.sqlite
 

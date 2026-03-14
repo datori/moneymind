@@ -46,17 +46,26 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 # ---------------------------------------------------------------------------
 
 
-def get_db() -> Generator[sqlite3.Connection, None, None]:
+def _is_demo(request: Request) -> bool:
+    return request.query_params.get("demo") == "1"
+
+
+def get_db(request: Request) -> Generator[sqlite3.Connection, None, None]:
     """Yield an open SQLite connection; close on exit.
 
     Uses check_same_thread=False so the connection can be used inside FastAPI's
     async request handlers, which may execute on a different thread from the
     dependency resolver.
+
+    When the request carries ?demo=1, connects to data/demo.db instead of the
+    real database. The real database is never opened or modified in demo mode.
     """
-    from pathlib import Path
     from finance.db import DATABASE_PATH
 
-    db_path = Path(DATABASE_PATH)
+    if _is_demo(request):
+        db_path = Path("data/demo.db")
+    else:
+        db_path = Path(DATABASE_PATH)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -123,6 +132,7 @@ async def index(
             "recent_runs": recent_runs,
             "msg": msg,
             "error": error,
+            "demo_mode": _is_demo(request),
         },
     )
 
@@ -218,6 +228,7 @@ async def accounts_page(
             "total_assets": total_assets,
             "total_liabilities": total_liabilities,
             "net_worth": net_worth,
+            "demo_mode": _is_demo(request),
         },
     )
 
@@ -323,6 +334,7 @@ async def transactions_page(
             "sort_by": sort_by,
             "sort_dir": sort_dir,
             "txn_chart_json": txn_chart_json,
+            "demo_mode": _is_demo(request),
         },
     )
 
@@ -371,7 +383,7 @@ async def net_worth_page(
 
     return templates.TemplateResponse(
         "net_worth.html",
-        {"request": request, "chart_data_json": chart_data_json},
+        {"request": request, "chart_data_json": chart_data_json, "demo_mode": _is_demo(request)},
     )
 
 
@@ -428,6 +440,7 @@ async def spending_page(
             "total_spent": total_spent,
             "total_count": total_count,
             "avg_per_day": avg_per_day,
+            "demo_mode": _is_demo(request),
         },
     )
 
@@ -445,6 +458,7 @@ async def review_page(
             "request": request,
             "transactions": transactions,
             "categories": CATEGORIES,
+            "demo_mode": _is_demo(request),
         },
     )
 
@@ -664,6 +678,7 @@ async def recurring_page(
             "include_education": include_education,
             "include_health": include_health,
             "today_date": date.today().isoformat(),
+            "demo_mode": _is_demo(request),
         },
     )
 
@@ -760,6 +775,8 @@ async def sync_now(
     conn: sqlite3.Connection = Depends(get_db),
 ):
     """Trigger a SimpleFIN sync and redirect back to referring page."""
+    if _is_demo(request):
+        raise HTTPException(status_code=400, detail="Not available in demo mode")
     referer = request.headers.get("referer", "/")
     # Strip to path+query only (avoid open-redirect)
     from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
@@ -852,7 +869,7 @@ async def pipeline_page(
 
     return templates.TemplateResponse(
         "pipeline.html",
-        {"request": request, "runs": runs, "current_state": current_state},
+        {"request": request, "runs": runs, "current_state": current_state, "demo_mode": _is_demo(request)},
     )
 
 
@@ -865,6 +882,9 @@ def pipeline_run_stream(request: Request):
     background thread + queue so the generator can yield events as they are
     emitted by run_pipeline rather than buffering them all.
     """
+    if _is_demo(request):
+        raise HTTPException(status_code=400, detail="Not available in demo mode")
+
     import queue
     import threading
 
@@ -944,7 +964,7 @@ async def reports_page(
 
     return templates.TemplateResponse(
         "reports.html",
-        {"request": request, "reports": reports},
+        {"request": request, "reports": reports, "demo_mode": _is_demo(request)},
     )
 
 
@@ -973,7 +993,7 @@ async def report_detail_page(
     report = dict(row)
     return templates.TemplateResponse(
         "report_detail.html",
-        {"request": request, "report": report},
+        {"request": request, "report": report, "demo_mode": _is_demo(request)},
     )
 
 

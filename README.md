@@ -2,6 +2,8 @@
 
 A local, self-hosted personal finance dashboard with AI-powered transaction categorization. Syncs accounts and transactions via [SimpleFIN Bridge](https://www.simplefin.org/), stores everything in a local SQLite database, and serves a web dashboard for spending analysis, net worth tracking, and recurring charge detection.
 
+![Finance Dashboard](screenshots/dashboard-demo.png)
+
 ## Features
 
 - **Daily sync** — pulls balances and transactions from all linked accounts via SimpleFIN

@@ -25,6 +25,10 @@ bugs/
 .claude/worktrees/
 .claude/*.local.md
 
+# Screenshot tooling
+node_modules/
+screenshots/_raw_*.png
+
 # Misc
 .DS_Store
 *.swp
